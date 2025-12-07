@@ -1,9 +1,49 @@
 import logging
 import math
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Tuple, Optional, Set
 
 import numpy as np
 from scipy import stats
+
+
+# =============================================================================
+# Commercial Intent Indicators (CPC Proxy Heuristics)
+# =============================================================================
+
+# High-value commercial keywords indicating purchase/lead intent
+# These typically have higher CPC in paid search
+COMMERCIAL_TRIGGERS = {
+    "quote", "quotes", "price", "prices", "pricing", "cost", "costs",
+    "rates", "estimate", "estimates", "estimation",
+    "companies", "company", "contractors", "contractor", "services",
+    "hire", "hiring", "agency", "agencies", "firm", "firms",
+    "consultation", "consult", "consultant", "consultants",
+    "package", "packages", "plan", "plans",
+}
+
+# Transactional triggers (highest commercial value)
+TRANSACTIONAL_TRIGGERS = {
+    "buy", "purchase", "order", "book", "booking",
+    "get quote", "request quote", "free quote",
+    "near me", "in my area", "local",
+    "for sale", "deals", "discount", "offer",
+}
+
+# B2B/Enterprise indicators (high-value leads)
+B2B_TRIGGERS = {
+    "enterprise", "business", "commercial", "corporate", "b2b",
+    "wholesale", "bulk", "industrial", "professional",
+    "solutions", "platform", "software", "system",
+}
+
+# UAE/Gulf-specific commercial terms
+UAE_COMMERCIAL_TRIGGERS = {
+    "fit out", "fitout", "turnkey", "mep", "hvac",
+    "renovation", "construction", "contracting",
+    "interior design", "landscaping",
+    "license", "approval", "permit",
+    "villa", "warehouse", "office",
+}
 
 
 def raw_volume_proxy(
@@ -56,6 +96,85 @@ def business_relevance(intent: str, goals: str) -> float:
             return 0.8
     # Default fallback
     return 0.6
+
+
+def commercial_value(
+    keyword: str,
+    intent: str = "informational",
+    geo: str = "global",
+    niche: Optional[str] = None,
+) -> float:
+    """
+    Calculate commercial value score (CPC proxy heuristic).
+    
+    Since we don't have paid API access to CPC data, we use trigger-word
+    heuristics to estimate the commercial value of a keyword.
+    
+    High commercial value keywords are prioritized for lead generation
+    over traffic-focused informational keywords.
+    
+    Args:
+        keyword: The keyword to evaluate
+        intent: Pre-classified intent ('transactional', 'commercial', etc.)
+        geo: Geographic target (enables locale-specific triggers)
+        niche: Optional niche for specialized triggers
+        
+    Returns:
+        Commercial value score (0.0 - 1.0)
+        - 0.0-0.3: Low commercial value (informational)
+        - 0.3-0.6: Medium commercial value (research phase)
+        - 0.6-0.8: High commercial value (comparison/evaluation)
+        - 0.8-1.0: Very high commercial value (ready to convert)
+    """
+    kw_lower = keyword.lower()
+    tokens = set(kw_lower.split())
+    
+    score = 0.0
+    
+    # Base score from intent
+    intent_scores = {
+        "transactional": 0.6,
+        "commercial": 0.4,
+        "comparative": 0.35,
+        "local": 0.3,
+        "complex_research": 0.2,
+        "direct_answer": 0.1,
+        "informational": 0.1,
+        "navigational": 0.0,
+    }
+    score += intent_scores.get(intent, 0.1)
+    
+    # Transactional trigger boost (highest value)
+    for trigger in TRANSACTIONAL_TRIGGERS:
+        if trigger in kw_lower:
+            score += 0.3
+            break
+    
+    # Commercial trigger boost
+    commercial_matches = len(tokens & COMMERCIAL_TRIGGERS)
+    score += min(0.2, commercial_matches * 0.1)
+    
+    # B2B/Enterprise trigger boost
+    b2b_matches = len(tokens & B2B_TRIGGERS)
+    score += min(0.15, b2b_matches * 0.1)
+    
+    # UAE/Gulf-specific commercial triggers
+    if geo.lower() in ("ae", "sa", "qa", "kw", "bh", "om"):
+        for trigger in UAE_COMMERCIAL_TRIGGERS:
+            if trigger in kw_lower:
+                score += 0.15
+                break
+    
+    # Contracting niche boost for specific service terms
+    if niche and niche.lower() in ("contracting", "construction"):
+        construction_terms = {"villa", "warehouse", "fit out", "renovation", "mep"}
+        for term in construction_terms:
+            if term in kw_lower:
+                score += 0.1
+                break
+    
+    # Cap at 1.0
+    return float(min(1.0, max(0.0, score)))
 
 
 def compute_metrics(
@@ -137,12 +256,55 @@ def compute_metrics(
     return metrics
 
 
-def opportunity_scores(metrics: Dict[str, Dict], intents: Dict[str, str], goals: str) -> Dict[str, float]:
+def opportunity_scores(
+    metrics: Dict[str, Dict],
+    intents: Dict[str, str],
+    goals: str,
+    geo: str = "global",
+    niche: Optional[str] = None,
+) -> Dict[str, float]:
+    """
+    Calculate opportunity scores for keywords.
+    
+    Formula: search_volume * (1 - difficulty) * (business_relevance + commercial_boost)
+    
+    For lead-generation goals, commercial_value provides additional boost
+    to high-value transactional keywords.
+    
+    Args:
+        metrics: Dict of keyword -> metrics dict
+        intents: Dict of keyword -> intent classification
+        goals: Business goals string ('traffic', 'leads', etc.)
+        geo: Geographic target for locale-specific scoring
+        niche: Optional niche for specialized scoring
+        
+    Returns:
+        Dict mapping keyword -> opportunity score (0.0 - 1.0)
+    """
     scores = {}
+    goals_lower = goals.lower()
+    
+    # Determine if we should prioritize commercial value
+    prioritize_leads = any(k in goals_lower for k in ["lead", "sales", "revenue", "conversion"])
+    
     for k, m in metrics.items():
-        br = business_relevance(intents.get(k, "informational"), goals)  # 0.6..1.0
+        intent = intents.get(k, "informational")
+        br = business_relevance(intent, goals)  # 0.6..1.0
         v = m.get("search_volume", 0.0)
         d = m.get("difficulty", 0.5)
-        score = v * (1.0 - d) * br
+        
+        # Base score formula
+        base_score = v * (1.0 - d) * br
+        
+        # Add commercial boost for lead-focused goals
+        if prioritize_leads:
+            cv = commercial_value(k, intent, geo, niche)
+            # Commercial boost adds up to 50% to the score
+            commercial_boost = cv * 0.5
+            score = base_score + (base_score * commercial_boost)
+        else:
+            score = base_score
+        
         scores[k] = float(max(0.0, min(1.0, score)))
+    
     return scores
