@@ -2,7 +2,7 @@ import json
 import logging
 import sys
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict
 
 import typer
 import yaml
@@ -174,6 +174,213 @@ def run(
     else:
         console.print("[yellow]⚠ No keywords generated. Try adding more sources or adjusting settings.[/yellow]")
         sys.exit(1)
+
+
+@app.command()
+def brief(
+    input_file: str = typer.Argument(..., help="Path to keywords JSON file"),
+    cluster: Optional[str] = typer.Option(None, "--cluster", "-c", help="Specific cluster to generate brief for"),
+    output: Optional[str] = typer.Option(None, "--output", "-o", help="Output markdown file (default: stdout)"),
+    provider: str = typer.Option("auto", "--provider", help="LLM provider for brief generation"),
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+):
+    """
+    Generate a content brief from clustered keywords.
+    
+    Creates an SEO-optimized content brief with:
+    - Suggested H1 title
+    - Primary intent analysis
+    - Key questions to answer
+    - Entity/topic recommendations
+    
+    Example:
+        keyword-lab brief keywords.json --cluster cluster-0 -o brief.md
+    """
+    from .llm import _detect_provider, HAS_GENAI, HAS_LITELLM
+    
+    setup_logging(verbose)
+    
+    # Load keywords file
+    try:
+        with open(input_file, 'r') as f:
+            items = json.load(f)
+    except Exception as e:
+        err_console.print(f"[red]Error loading {input_file}: {e}[/red]")
+        sys.exit(1)
+    
+    if not items:
+        err_console.print("[yellow]No keywords found in file.[/yellow]")
+        sys.exit(1)
+    
+    # Filter by cluster if specified
+    if cluster:
+        items = [i for i in items if i.get("cluster", "").lower() == cluster.lower()]
+        if not items:
+            err_console.print(f"[yellow]No keywords found in cluster '{cluster}'[/yellow]")
+            sys.exit(1)
+    
+    # Group by cluster
+    clusters_data: Dict[str, List[dict]] = {}
+    for item in items:
+        c = item.get("cluster", "unknown")
+        if c not in clusters_data:
+            clusters_data[c] = []
+        clusters_data[c].append(item)
+    
+    # Generate briefs
+    briefs = []
+    for cluster_name, keywords in clusters_data.items():
+        brief_md = _generate_content_brief(cluster_name, keywords, provider)
+        briefs.append(brief_md)
+    
+    full_output = "\n\n---\n\n".join(briefs)
+    
+    if output:
+        Path(output).write_text(full_output)
+        console.print(f"[green]✓[/green] Saved brief to {output}")
+    else:
+        console.print(full_output)
+
+
+def _generate_content_brief(cluster_name: str, keywords: List[dict], provider: str) -> str:
+    """Generate a content brief for a cluster of keywords."""
+    from .llm import _detect_provider, HAS_GENAI, HAS_LITELLM
+    import os
+    
+    # Sort by opportunity score
+    keywords = sorted(keywords, key=lambda k: k.get("opportunity_score", 0), reverse=True)
+    
+    # Extract key data
+    kw_list = [k["keyword"] for k in keywords]
+    intents = set(k.get("intent", "informational") for k in keywords)
+    primary_intent = max(intents, key=lambda i: sum(1 for k in keywords if k.get("intent") == i))
+    avg_volume = sum(k.get("search_volume", 0) for k in keywords) / len(keywords)
+    avg_difficulty = sum(k.get("difficulty", 0) for k in keywords) / len(keywords)
+    questions = [k["keyword"] for k in keywords if any(
+        k["keyword"].startswith(q) for q in ["how", "what", "why", "when", "where", "which", "who"]
+    )]
+    
+    # Build brief with or without LLM
+    detected_provider = _detect_provider() if provider == "auto" else provider
+    
+    h1_suggestion = kw_list[0].title() if kw_list else cluster_name.title()
+    
+    brief = f"""# Content Brief: {cluster_name.replace('-', ' ').title()}
+
+## Overview
+- **Primary Intent:** {primary_intent.title()}
+- **Keywords:** {len(keywords)}
+- **Avg. Search Volume Score:** {avg_volume:.2f}
+- **Avg. Difficulty Score:** {avg_difficulty:.2f}
+
+## Suggested H1
+> {h1_suggestion}
+
+## Target Keywords
+{chr(10).join(f"- {kw}" for kw in kw_list[:10])}
+{"" if len(kw_list) <= 10 else f"- ... and {len(kw_list) - 10} more"}
+
+## Questions to Answer
+{chr(10).join(f"- {q}" for q in questions[:8]) if questions else "- No question-style keywords detected"}
+
+## Content Recommendations
+- **Funnel Stage:** {_get_dominant_funnel(keywords)}
+- **Word Count:** {_suggest_word_count(primary_intent)}
+- **Content Type:** {_suggest_content_type(primary_intent)}
+
+## SEO Checklist
+- [ ] Include primary keyword in H1
+- [ ] Address top questions in subheadings
+- [ ] Add internal links to related content
+- [ ] Include relevant entities/topics
+- [ ] Optimize meta description with key terms
+"""
+    
+    # Try to enhance with LLM if available
+    if detected_provider and detected_provider != "none":
+        try:
+            enhanced = _enhance_brief_with_llm(cluster_name, kw_list, detected_provider)
+            if enhanced:
+                brief += f"\n## AI-Generated Insights\n{enhanced}\n"
+        except Exception as e:
+            logging.debug(f"LLM brief enhancement failed: {e}")
+    
+    return brief
+
+
+def _get_dominant_funnel(keywords: List[dict]) -> str:
+    """Get the dominant funnel stage from keywords."""
+    stages = [k.get("funnel_stage", "MOFU") for k in keywords]
+    from collections import Counter
+    return Counter(stages).most_common(1)[0][0]
+
+
+def _suggest_word_count(intent: str) -> str:
+    """Suggest word count based on intent."""
+    counts = {
+        "informational": "1500-2500 words (comprehensive guide)",
+        "commercial": "1000-1500 words (comparison/review)",
+        "transactional": "500-800 words (product-focused)",
+        "navigational": "300-500 words (reference page)",
+        "direct_answer": "300-600 words (quick answer + context)",
+        "complex_research": "2000-3500 words (in-depth analysis)",
+        "comparative": "1200-2000 words (detailed comparison)",
+        "local": "600-1000 words (local landing page)",
+    }
+    return counts.get(intent, "1000-1500 words")
+
+
+def _suggest_content_type(intent: str) -> str:
+    """Suggest content type based on intent."""
+    types = {
+        "informational": "How-to Guide, Tutorial, or Explainer",
+        "commercial": "Comparison Post, Review, or Listicle",
+        "transactional": "Product Page, Landing Page, or Pricing Page",
+        "navigational": "About Page, Contact, or FAQ",
+        "direct_answer": "FAQ Entry, Snippet-optimized Post",
+        "complex_research": "Ultimate Guide, Whitepaper, or Long-form Article",
+        "comparative": "Versus Post, Comparison Table, or Buyer's Guide",
+        "local": "Local Landing Page, Store Locator, or City Guide",
+    }
+    return types.get(intent, "Blog Post or Article")
+
+
+def _enhance_brief_with_llm(cluster_name: str, keywords: List[str], provider: str) -> str:
+    """Use LLM to add insights to the brief."""
+    from .llm import HAS_GENAI, HAS_LITELLM
+    import os
+    
+    prompt = f"""Analyze these SEO keywords for the topic "{cluster_name}" and provide:
+1. A compelling meta description (150-160 chars)
+2. 3 key entities/topics that MUST be mentioned for topical authority
+3. 1 content angle that competitors likely miss
+
+Keywords: {', '.join(keywords[:15])}
+
+Be concise. Format as bullet points."""
+
+    try:
+        if provider == "gemini" and HAS_GENAI:
+            import google.generativeai as genai
+            api_key = os.getenv("GEMINI_API_KEY", "")
+            if api_key:
+                genai.configure(api_key=api_key)
+                model = genai.GenerativeModel("gemini-2.0-flash")
+                resp = model.generate_content(prompt)
+                return getattr(resp, "text", "")
+        elif HAS_LITELLM:
+            import litellm
+            model = "gpt-4o-mini" if os.getenv("OPENAI_API_KEY") else "claude-3-haiku-20240307"
+            response = litellm.completion(
+                model=model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=500,
+            )
+            return response.choices[0].message.content or ""
+    except Exception as e:
+        logging.debug(f"LLM enhancement failed: {e}")
+    
+    return ""
 
 
 @app.callback(invoke_without_command=True)
