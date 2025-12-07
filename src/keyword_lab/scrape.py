@@ -64,7 +64,37 @@ def _allowed_by_robots(url: str, user_agent: str) -> bool:
         return True
 
 
-def _extract_visible_text(html: str) -> str:
+# Try to import markdownify for better HTML conversion
+try:
+    from markdownify import markdownify as md
+    HAS_MARKDOWNIFY = True
+except ImportError:
+    HAS_MARKDOWNIFY = False
+
+
+def _extract_visible_text(html: str, preserve_structure: bool = True) -> str:
+    """
+    Extract visible text from HTML.
+    
+    Args:
+        html: Raw HTML content
+        preserve_structure: If True and markdownify is available, converts to Markdown
+                          to preserve headers and structure. Otherwise uses BeautifulSoup.
+    
+    Returns:
+        Extracted text content
+    """
+    if preserve_structure and HAS_MARKDOWNIFY:
+        try:
+            # Convert to Markdown to preserve structure (headers, lists, etc.)
+            text = md(html, heading_style="ATX", strip=["script", "style", "noscript"])
+            # Clean up excessive whitespace
+            lines = [line.strip() for line in text.splitlines() if line.strip()]
+            return "\n".join(lines)
+        except Exception:
+            pass
+    
+    # Fallback to BeautifulSoup extraction
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()

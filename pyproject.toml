@@ -41,6 +41,7 @@ ml = ["sentence-transformers>=2.2.0,<3.0.0"]
 llm = ["google-generativeai>=0.8.0,<1.0.0", "litellm>=1.0.0,<2.0.0"]
 excel = ["openpyxl>=3.1.0,<4.0.0"]
 cache = ["joblib>=1.3.0,<2.0.0"]
+scrape = ["markdownify>=0.11.0,<1.0.0"]
 all = [
     "sentence-transformers>=2.2.0,<3.0.0",
     "google-generativeai>=0.8.0,<1.0.0",
