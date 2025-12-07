@@ -1,0 +1,37 @@
+# Ruff configuration for keyword-lab
+# https://docs.astral.sh/ruff/
+
+[lint]
+# Enable these rule categories
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "SIM", # flake8-simplify
+]
+
+# Ignore specific rules
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # function call in default argument (needed for typer)
+    "SIM108", # use ternary operator (sometimes less readable)
+]
+
+[lint.per-file-ignores]
+# Tests can use assert and have unused imports
+"tests/**/*.py" = ["S101", "F401"]
+
+[lint.isort]
+known-first-party = ["keyword_lab"]
+
+[format]
+# Use double quotes
+quote-style = "double"
+# Indent with spaces
+indent-style = "space"
+# Line length
+line-length = 100
