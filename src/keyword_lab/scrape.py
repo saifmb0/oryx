@@ -484,6 +484,12 @@ def read_local_sources(path: str) -> List[Document]:
 
 
 def _serpapi_search(query: str, api_key: str, max_results: int = 10) -> List[Dict]:
+    """
+    Search via SerpAPI and return organic results.
+    
+    Also extracts 'People Also Ask' questions which are valuable for
+    featured snippet optimization and AI citation.
+    """
     url = "https://serpapi.com/search.json"
     params = {
         "engine": "google",
@@ -507,6 +513,118 @@ def _serpapi_search(query: str, api_key: str, max_results: int = 10) -> List[Dic
     except Exception as e:
         logging.debug(f"SerpAPI search failed: {e}")
         return []
+
+
+def extract_paa_from_serpapi(query: str, api_key: str) -> List[str]:
+    """
+    Extract 'People Also Ask' questions from SerpAPI response.
+    
+    PAA questions are high-value for:
+    - Featured snippet optimization
+    - AI/Generative Engine citations
+    - Content gap identification
+    
+    Args:
+        query: Search query
+        api_key: SerpAPI key
+        
+    Returns:
+        List of PAA question strings
+    """
+    url = "https://serpapi.com/search.json"
+    params = {
+        "engine": "google",
+        "q": query,
+        "api_key": api_key,
+    }
+    try:
+        r = requests.get(url, params=params, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+        
+        paa_questions = []
+        for item in data.get("related_questions", []):
+            question = item.get("question", "").strip()
+            if question:
+                paa_questions.append(question.lower())
+        
+        logging.debug(f"Extracted {len(paa_questions)} PAA questions for '{query}'")
+        return paa_questions
+    except Exception as e:
+        logging.debug(f"PAA extraction failed: {e}")
+        return []
+
+
+def extract_paa_from_bing(query: str, api_key: str) -> List[str]:
+    """
+    Extract related questions from Bing API response.
+    
+    Args:
+        query: Search query
+        api_key: Bing API key
+        
+    Returns:
+        List of related question strings
+    """
+    url = "https://api.bing.microsoft.com/v7.0/search"
+    headers = {"Ocp-Apim-Subscription-Key": api_key}
+    params = {"q": query, "responseFilter": "RelatedSearches"}
+    try:
+        r = requests.get(url, headers=headers, params=params, timeout=15)
+        r.raise_for_status()
+        data = r.json()
+        
+        questions = []
+        # Bing returns related searches, filter for question-like patterns
+        for item in data.get("relatedSearches", {}).get("value", []):
+            text = item.get("text", "").strip().lower()
+            if text and any(text.startswith(q) for q in ["how", "what", "why", "when", "where", "which", "who"]):
+                questions.append(text)
+        
+        return questions
+    except Exception as e:
+        logging.debug(f"Bing PAA extraction failed: {e}")
+        return []
+
+
+def get_paa_questions(
+    query: str,
+    provider: str = "auto",
+    serpapi_key: Optional[str] = None,
+    bing_key: Optional[str] = None,
+) -> List[str]:
+    """
+    Get People Also Ask questions for a query.
+    
+    Automatically selects provider based on available API keys.
+    
+    Args:
+        query: Search query
+        provider: 'serpapi', 'bing', or 'auto'
+        serpapi_key: Optional SerpAPI key (uses env var if not provided)
+        bing_key: Optional Bing key (uses env var if not provided)
+        
+    Returns:
+        List of PAA/related question strings
+    """
+    serpapi_key = serpapi_key or os.getenv("SERPAPI_KEY", "")
+    bing_key = bing_key or os.getenv("BING_API_KEY", "")
+    
+    if provider == "auto":
+        if serpapi_key:
+            provider = "serpapi"
+        elif bing_key:
+            provider = "bing"
+        else:
+            logging.debug("No SERP API keys available for PAA extraction")
+            return []
+    
+    if provider == "serpapi" and serpapi_key:
+        return extract_paa_from_serpapi(query, serpapi_key)
+    elif provider == "bing" and bing_key:
+        return extract_paa_from_bing(query, bing_key)
+    
+    return []
 
 
 def _bing_search(query: str, api_key: str, max_results: int = 10) -> List[Dict]:
