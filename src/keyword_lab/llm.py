@@ -9,7 +9,7 @@ Supports multiple providers via LiteLLM or direct API calls:
 
 import logging
 import os
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 
 # LiteLLM availability
@@ -25,6 +25,16 @@ try:
     HAS_GENAI = True
 except ImportError:
     HAS_GENAI = False
+
+
+# GEO-centric intent categories for Generative Engine Optimization
+GEO_INTENT_CATEGORIES = {
+    "direct_answer": "Simple factual queries that can be answered in a sentence or two (e.g., 'what is the capital of france')",
+    "complex_research": "Multi-faceted queries requiring comprehensive exploration (e.g., 'how to start a business')",
+    "transactional": "Queries with purchase or action intent (e.g., 'buy coffee beans online')",
+    "local": "Location-based queries (e.g., 'coffee shops near me')",
+    "comparative": "Queries comparing options or seeking recommendations (e.g., 'best crm for small business')",
+}
 
 
 def _build_prompt(seed: str, audience: str, language: str, geo: str, max_results: int) -> str:
@@ -190,3 +200,236 @@ def expand_with_gemini(
 ) -> List[str]:
     """Legacy function - use expand_with_llm instead."""
     return expand_with_llm(seed, audience, language, geo, max_results, provider="gemini")
+
+
+# ============================================================================
+# GEO-Centric Intent Classification
+# ============================================================================
+
+def _build_intent_prompt(keywords: List[str]) -> str:
+    """Build the intent classification prompt for GEO categories."""
+    categories = "\n".join(f"- {k}: {v}" for k, v in GEO_INTENT_CATEGORIES.items())
+    keyword_list = "\n".join(f"- {kw}" for kw in keywords[:50])  # Limit batch size
+    
+    return f"""Classify each keyword into exactly ONE of these GEO-centric intent categories:
+
+{categories}
+
+Keywords to classify:
+{keyword_list}
+
+Return ONLY a JSON object mapping each keyword to its intent category.
+Example format: {{"keyword1": "direct_answer", "keyword2": "comparative"}}
+No additional text or explanation."""
+
+
+def _parse_intent_response(text: str, keywords: List[str]) -> Dict[str, str]:
+    """Parse LLM intent classification response."""
+    import json
+    
+    # Try to extract JSON from response
+    try:
+        # Find JSON object in response
+        start = text.find("{")
+        end = text.rfind("}") + 1
+        if start >= 0 and end > start:
+            json_str = text[start:end]
+            result = json.loads(json_str)
+            
+            # Validate and normalize
+            valid_intents = set(GEO_INTENT_CATEGORIES.keys())
+            normalized = {}
+            for kw in keywords:
+                intent = result.get(kw, result.get(kw.lower(), "informational"))
+                if isinstance(intent, str):
+                    intent = intent.lower().replace(" ", "_")
+                    if intent in valid_intents:
+                        normalized[kw] = intent
+                    else:
+                        # Map to closest match or default
+                        normalized[kw] = "informational"
+                else:
+                    normalized[kw] = "informational"
+            return normalized
+    except (json.JSONDecodeError, Exception) as e:
+        logging.debug(f"Failed to parse intent response: {e}")
+    
+    # Fallback: return informational for all
+    return {kw: "informational" for kw in keywords}
+
+
+def classify_intents_with_llm(
+    keywords: List[str],
+    provider: str = "auto",
+    model: Optional[str] = None,
+    batch_size: int = 50,
+) -> Dict[str, str]:
+    """
+    Classify keywords into GEO-centric intent categories using LLM.
+    
+    Categories:
+    - direct_answer: Simple factual queries
+    - complex_research: Multi-faceted exploratory queries
+    - transactional: Purchase/action intent
+    - local: Location-based queries
+    - comparative: Comparison/recommendation queries
+    
+    Args:
+        keywords: List of keywords to classify
+        provider: LLM provider ('auto', 'gemini', 'openai', 'anthropic')
+        model: Optional specific model name
+        batch_size: Max keywords per LLM call
+        
+    Returns:
+        Dict mapping keyword -> intent category
+    """
+    if not keywords:
+        return {}
+    
+    if provider == "none":
+        return {kw: "informational" for kw in keywords}
+    
+    # Auto-detect provider
+    if provider == "auto":
+        provider = _detect_provider()
+        if provider is None:
+            logging.debug("No LLM available for intent classification")
+            return {kw: "informational" for kw in keywords}
+    
+    all_intents: Dict[str, str] = {}
+    
+    # Process in batches
+    for i in range(0, len(keywords), batch_size):
+        batch = keywords[i:i + batch_size]
+        prompt = _build_intent_prompt(batch)
+        
+        try:
+            if provider == "gemini" and HAS_GENAI:
+                api_key = os.getenv("GEMINI_API_KEY", "").strip()
+                if api_key:
+                    genai.configure(api_key=api_key)
+                    model_name = model or os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+                    model_instance = genai.GenerativeModel(model_name)
+                    resp = model_instance.generate_content(prompt)
+                    text = getattr(resp, "text", "") or ""
+                    batch_intents = _parse_intent_response(text, batch)
+                    all_intents.update(batch_intents)
+            elif HAS_LITELLM:
+                llm_model = model
+                if llm_model is None:
+                    if provider == "openai" or os.getenv("OPENAI_API_KEY"):
+                        llm_model = "gpt-4o-mini"
+                    elif provider == "anthropic" or os.getenv("ANTHROPIC_API_KEY"):
+                        llm_model = "claude-3-haiku-20240307"
+                
+                if llm_model:
+                    response = litellm.completion(
+                        model=llm_model,
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=2000,
+                    )
+                    text = response.choices[0].message.content or ""
+                    batch_intents = _parse_intent_response(text, batch)
+                    all_intents.update(batch_intents)
+        except Exception as e:
+            logging.debug(f"LLM intent classification failed: {e}")
+            # Fallback for failed batch
+            for kw in batch:
+                if kw not in all_intents:
+                    all_intents[kw] = "informational"
+    
+    # Fill any missing keywords
+    for kw in keywords:
+        if kw not in all_intents:
+            all_intents[kw] = "informational"
+    
+    logging.info(f"Classified {len(all_intents)} keywords with LLM intent detection")
+    return all_intents
+
+
+def assign_parent_topics(
+    keywords: List[str],
+    provider: str = "auto",
+    model: Optional[str] = None,
+    max_topics: int = 10,
+) -> Dict[str, str]:
+    """
+    Assign parent topics to keywords for hub-spoke SEO architecture.
+    
+    Creates topical clusters where each keyword maps to a broader "pillar" topic.
+    This enables SEO silo architecture for building topical authority.
+    
+    Args:
+        keywords: List of keywords to assign topics
+        provider: LLM provider
+        model: Optional model name
+        max_topics: Maximum number of parent topics to create
+        
+    Returns:
+        Dict mapping keyword -> parent topic
+    """
+    if not keywords:
+        return {}
+    
+    if provider == "none":
+        return {kw: kw.split()[0] for kw in keywords}  # Use first word as topic
+    
+    # Auto-detect provider
+    if provider == "auto":
+        provider = _detect_provider()
+        if provider is None:
+            return {kw: kw.split()[0] for kw in keywords}
+    
+    keyword_list = "\n".join(f"- {kw}" for kw in keywords[:100])
+    
+    prompt = f"""Analyze these SEO keywords and assign each to a parent topic (pillar).
+Create at most {max_topics} parent topics that represent the main themes.
+Parent topics should be 2-4 words, descriptive, and SEO-friendly.
+
+Keywords:
+{keyword_list}
+
+Return ONLY a JSON object mapping each keyword to its parent topic.
+Example: {{"how to brew coffee": "coffee brewing", "best espresso machine": "espresso equipment"}}
+No additional text."""
+
+    try:
+        text = ""
+        if provider == "gemini" and HAS_GENAI:
+            api_key = os.getenv("GEMINI_API_KEY", "").strip()
+            if api_key:
+                genai.configure(api_key=api_key)
+                model_name = model or os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+                model_instance = genai.GenerativeModel(model_name)
+                resp = model_instance.generate_content(prompt)
+                text = getattr(resp, "text", "") or ""
+        elif HAS_LITELLM:
+            llm_model = model or ("gpt-4o-mini" if os.getenv("OPENAI_API_KEY") else "claude-3-haiku-20240307")
+            response = litellm.completion(
+                model=llm_model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=3000,
+            )
+            text = response.choices[0].message.content or ""
+        
+        if text:
+            import json
+            start = text.find("{")
+            end = text.rfind("}") + 1
+            if start >= 0 and end > start:
+                result = json.loads(text[start:end])
+                # Normalize and fill missing
+                topics = {}
+                for kw in keywords:
+                    topic = result.get(kw, result.get(kw.lower()))
+                    if isinstance(topic, str) and topic.strip():
+                        topics[kw] = topic.strip().lower()
+                    else:
+                        topics[kw] = kw.split()[0]
+                logging.info(f"Assigned {len(set(topics.values()))} parent topics to {len(topics)} keywords")
+                return topics
+    except Exception as e:
+        logging.debug(f"Parent topic assignment failed: {e}")
+    
+    # Fallback
+    return {kw: kw.split()[0] for kw in keywords}
