@@ -7,41 +7,60 @@ import numpy as np
 import pandas as pd
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 
-
-# Bundled English stopwords - eliminates NLTK dependency
-# Based on NLTK's English stopwords list
-EN_STOPWORDS = {
-    "i", "me", "my", "myself", "we", "our", "ours", "ourselves", "you", "your",
-    "yours", "yourself", "yourselves", "he", "him", "his", "himself", "she",
-    "her", "hers", "herself", "it", "its", "itself", "they", "them", "their",
-    "theirs", "themselves", "what", "which", "who", "whom", "this", "that",
-    "these", "those", "am", "is", "are", "was", "were", "be", "been", "being",
-    "have", "has", "had", "having", "do", "does", "did", "doing", "a", "an",
-    "the", "and", "but", "if", "or", "because", "as", "until", "while", "of",
-    "at", "by", "for", "with", "about", "against", "between", "into", "through",
-    "during", "before", "after", "above", "below", "to", "from", "up", "down",
-    "in", "out", "on", "off", "over", "under", "again", "further", "then",
-    "once", "here", "there", "when", "where", "why", "how", "all", "each",
-    "few", "more", "most", "other", "some", "such", "no", "nor", "not", "only",
-    "own", "same", "so", "than", "too", "very", "s", "t", "can", "will", "just",
-    "don", "should", "now", "d", "ll", "m", "o", "re", "ve", "y", "ain", "aren",
-    "couldn", "didn", "doesn", "hadn", "hasn", "haven", "isn", "ma", "mightn",
-    "mustn", "needn", "shan", "shouldn", "wasn", "weren", "won", "wouldn",
-}
+# Import multilingual stopwords
+from .stopwords import get_stopwords, EN_STOPWORDS, AR_STOPWORDS
 
 
-CLEAN_RE = re.compile(r"[^a-z\s]+")
+# Unicode-aware text cleaning regex
+# Supports Arabic script, Latin characters, and other Unicode letters
+# \w with re.UNICODE matches Unicode word characters (letters, digits, underscore)
+CLEAN_RE = re.compile(r"[^\w\s]+", re.UNICODE)
+
+# Regex to remove digits (optional, configurable)
+DIGITS_RE = re.compile(r"\d+")
 
 
-def clean_text(text: str) -> str:
+def clean_text(text: str, remove_digits: bool = False, language: str = "en") -> str:
+    """
+    Clean text for NLP processing with multilingual support.
+    
+    Args:
+        text: Input text to clean
+        remove_digits: If True, remove numeric characters
+        language: Language code ('en', 'ar', etc.) - currently informational
+        
+    Returns:
+        Cleaned text with non-word characters removed
+    """
+    # Lowercase (safe for Arabic - doesn't have case, so no-op)
     text = text.lower()
+    
+    # Remove non-word characters (preserves Arabic/Unicode letters)
     text = CLEAN_RE.sub(" ", text)
+    
+    # Optionally remove digits
+    if remove_digits:
+        text = DIGITS_RE.sub(" ", text)
+    
+    # Normalize whitespace
     text = re.sub(r"\s+", " ", text).strip()
+    
     return text
 
 
-def tokenize(text: str) -> List[str]:
-    return [t for t in text.split() if t and t not in EN_STOPWORDS]
+def tokenize(text: str, language: str = "en") -> List[str]:
+    """
+    Tokenize text with language-aware stopword removal.
+    
+    Args:
+        text: Text to tokenize
+        language: Language code ('en', 'ar', 'ar-en' for bilingual)
+        
+    Returns:
+        List of tokens with stopwords removed
+    """
+    stopwords = get_stopwords(language)
+    return [t for t in text.split() if t and t not in stopwords]
 
 
 def ngram_counts(texts: List[str], ngram_range=(2, 3), min_df: int = 2) -> pd.DataFrame:
