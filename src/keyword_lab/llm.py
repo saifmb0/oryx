@@ -13,7 +13,7 @@ def expand_with_gemini(seed: str, audience: str = "", language: str = "en", geo:
     if not api_key:
         return []
 
-    model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-pro")
+    model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
 
     try:
         genai.configure(api_key=api_key)
