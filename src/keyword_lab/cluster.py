@@ -15,11 +15,78 @@ except ImportError:
         "Falling back to TF-IDF vectorization."
     )
 
-# Recommended models for different use cases
+# =============================================================================
+# Embedding Model Configuration
+# =============================================================================
+
+# English-optimized models
 # multi-qa-MiniLM-L6-cos-v1: Optimized for question/answer retrieval (best for GEO/SGE)
 # all-MiniLM-L6-v2: General purpose semantic similarity
 DEFAULT_EMBEDDING_MODEL = "sentence-transformers/multi-qa-MiniLM-L6-cos-v1"
 FALLBACK_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+
+# Multilingual models for Arabic/non-English markets
+# paraphrase-multilingual-MiniLM-L12-v2: Best for Arabic/English bilingual clustering
+# distiluse-base-multilingual-cased-v2: Alternative multilingual model
+MULTILINGUAL_EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+MULTILINGUAL_FALLBACK_MODEL = "sentence-transformers/distiluse-base-multilingual-cased-v2"
+
+# Language-to-model mapping
+LANGUAGE_MODEL_MAP = {
+    "en": DEFAULT_EMBEDDING_MODEL,
+    "ar": MULTILINGUAL_EMBEDDING_MODEL,
+    "ar-en": MULTILINGUAL_EMBEDDING_MODEL,
+    "ae": MULTILINGUAL_EMBEDDING_MODEL,
+    "uae": MULTILINGUAL_EMBEDDING_MODEL,
+    "multilingual": MULTILINGUAL_EMBEDDING_MODEL,
+}
+
+# Geo-to-model mapping (for automatic model selection based on target market)
+GEO_MODEL_MAP = {
+    "ae": MULTILINGUAL_EMBEDDING_MODEL,
+    "sa": MULTILINGUAL_EMBEDDING_MODEL,  # Saudi Arabia
+    "qa": MULTILINGUAL_EMBEDDING_MODEL,  # Qatar
+    "kw": MULTILINGUAL_EMBEDDING_MODEL,  # Kuwait
+    "bh": MULTILINGUAL_EMBEDDING_MODEL,  # Bahrain
+    "om": MULTILINGUAL_EMBEDDING_MODEL,  # Oman
+    "eg": MULTILINGUAL_EMBEDDING_MODEL,  # Egypt
+    "jo": MULTILINGUAL_EMBEDDING_MODEL,  # Jordan
+    "lb": MULTILINGUAL_EMBEDDING_MODEL,  # Lebanon
+}
+
+
+def get_embedding_model_for_locale(
+    language: str = "en",
+    geo: str = "global",
+    model_override: Optional[str] = None,
+) -> str:
+    """
+    Select the appropriate embedding model based on language and geo target.
+    
+    Args:
+        language: Language code ('en', 'ar', 'ar-en', etc.)
+        geo: Geographic target ('global', 'ae', 'us', etc.)
+        model_override: Optional explicit model name to use
+        
+    Returns:
+        Model name string for SentenceTransformer
+    """
+    if model_override:
+        return model_override
+    
+    # Check language first
+    lang_lower = language.lower().strip()
+    if lang_lower in LANGUAGE_MODEL_MAP:
+        return LANGUAGE_MODEL_MAP[lang_lower]
+    
+    # Check geo for Arabic-speaking regions
+    geo_lower = geo.lower().strip()
+    if geo_lower in GEO_MODEL_MAP:
+        return GEO_MODEL_MAP[geo_lower]
+    
+    # Default to English Q&A model
+    return DEFAULT_EMBEDDING_MODEL
+
 
 # Default intent rules (can be overridden via config)
 DEFAULT_INTENT_RULES = {
@@ -65,24 +132,31 @@ def infer_intent(
     return "informational"
 
 
-def vectorize_keywords(keywords: List[str], model_name: Optional[str] = None):
+def vectorize_keywords(
+    keywords: List[str],
+    model_name: Optional[str] = None,
+    language: str = "en",
+    geo: str = "global",
+):
     """
-    Vectorize keywords for clustering.
+    Vectorize keywords for clustering with multilingual support.
     
-    Uses sentence-transformers if available, with multi-qa-MiniLM-L6-cos-v1
-    as the default model (optimized for Q&A retrieval, ideal for GEO/SGE).
-    Falls back to TF-IDF if sentence-transformers not installed.
+    Uses sentence-transformers if available. Automatically selects
+    multilingual model for Arabic/Gulf markets.
     
     Args:
         keywords: List of keywords to vectorize
         model_name: Optional specific model name override
+        language: Language code for automatic model selection
+        geo: Geographic target for automatic model selection
         
     Returns:
         numpy array of embeddings
     """
     if HAS_ST and keywords:
-        # Use Q&A-optimized model for better GEO alignment
-        model_to_use = model_name or DEFAULT_EMBEDDING_MODEL
+        # Select model based on locale
+        model_to_use = get_embedding_model_for_locale(language, geo, model_name)
+        
         try:
             model = SentenceTransformer(model_to_use)
             X = model.encode(keywords, show_progress_bar=False, normalize_embeddings=True)
@@ -90,14 +164,18 @@ def vectorize_keywords(keywords: List[str], model_name: Optional[str] = None):
             return np.array(X)
         except Exception as e:
             logging.debug(f"Failed to load {model_to_use}: {e}, trying fallback")
+            # Try appropriate fallback based on locale
+            fallback = MULTILINGUAL_FALLBACK_MODEL if geo.lower() in GEO_MODEL_MAP else FALLBACK_EMBEDDING_MODEL
             try:
-                model = SentenceTransformer(FALLBACK_EMBEDDING_MODEL)
+                model = SentenceTransformer(fallback)
                 X = model.encode(keywords, show_progress_bar=False, normalize_embeddings=True)
                 return np.array(X)
             except Exception:
                 pass
-    # Fallback to TF-IDF
-    vec = TfidfVectorizer(stop_words="english")
+    
+    # Fallback to TF-IDF (works for any language but less semantic)
+    # Note: Using None for stop_words to support multilingual
+    vec = TfidfVectorizer(stop_words=None if geo.lower() in GEO_MODEL_MAP else "english")
     X = vec.fit_transform(keywords)
     return X.toarray()
 
