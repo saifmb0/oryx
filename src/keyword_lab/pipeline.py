@@ -12,7 +12,7 @@ from .cluster import cluster_keywords, infer_intent
 from .metrics import compute_metrics, opportunity_scores
 from .schema import validate_items
 from .io import write_output
-from .llm import expand_with_llm
+from .llm import expand_with_llm, assign_parent_topics
 from .config import load_config, get_intent_rules, get_question_prefixes
 
 
@@ -182,6 +182,17 @@ def run_pipeline(
     )
     opp = opportunity_scores(metrics, intents, business_goals)
 
+    # Assign parent topics for hub-spoke SEO silo architecture
+    parent_topic_cfg = (config or {}).get("parent_topics", {})
+    parent_topics: Dict[str, str] = {}
+    if parent_topic_cfg.get("enabled", True) and not dry_run:
+        parent_topics = assign_parent_topics(
+            candidates,
+            provider=llm_cfg.get("provider", "auto"),
+            model=llm_cfg.get("model"),
+            max_topics=int(parent_topic_cfg.get("max_topics", 10)),
+        )
+
     # Assemble per cluster, prioritize opportunity score within clusters
     items: List[Dict] = []
     for cname, kws in clusters.items():
@@ -197,9 +208,12 @@ def run_pipeline(
                 break
         for kw in selected:
             m = metrics.get(kw, {})
+            # Get parent topic (fallback to first word if not assigned)
+            pt = parent_topics.get(kw, parent_topics.get(kw.lower(), kw.split()[0] if kw else "general"))
             it = {
                 "keyword": kw.lower(),
                 "cluster": cname.lower(),
+                "parent_topic": pt.lower() if isinstance(pt, str) else str(pt).lower(),
                 "intent": intents.get(kw, "informational"),
                 "funnel_stage": to_funnel_stage(intents.get(kw, "informational")),
                 "search_volume": float(m.get("search_volume", 0.0)),

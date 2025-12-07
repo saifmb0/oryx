@@ -7,6 +7,7 @@ def test_schema_validation():
         {
             "keyword": "best coffee beans",
             "cluster": "cluster-0",
+            "parent_topic": "coffee beans",
             "intent": "commercial",
             "funnel_stage": "MOFU",
             "search_volume": 200,

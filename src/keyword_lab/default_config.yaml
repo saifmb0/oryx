@@ -90,6 +90,15 @@ llm:
   max_expansion_results: 50
   model: null  # null means use provider default
 
+# Parent topic assignment for hub-spoke SEO silos
+parent_topics:
+  # Enable LLM-based parent topic assignment
+  enabled: true
+  
+  # Maximum number of parent topics to create
+  # Keywords will be grouped under these pillar topics
+  max_topics: 10
+
 # Output settings
 output:
   format: json  # json, csv, xlsx

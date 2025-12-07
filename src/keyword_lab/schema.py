@@ -8,6 +8,7 @@ COMPACT_SCHEMA = {
         "properties": {
             "keyword": {"type": "string"},
             "cluster": {"type": "string"},
+            "parent_topic": {"type": "string"},
             "intent": {"type": "string", "enum": [
                 "informational", "commercial", "transactional", "navigational",
                 # GEO-centric intents (added in Week 2)
@@ -21,7 +22,7 @@ COMPACT_SCHEMA = {
             "opportunity_score": {"type": "number", "minimum": 0, "maximum": 1}
         },
         "required": [
-            "keyword", "cluster", "intent", "funnel_stage",
+            "keyword", "cluster", "parent_topic", "intent", "funnel_stage",
             "search_volume", "difficulty", "estimated", "validated", "opportunity_score"
         ]
     }
