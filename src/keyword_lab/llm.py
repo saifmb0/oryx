@@ -165,7 +165,7 @@ def expand_with_llm(
     if provider == "auto":
         provider = _detect_provider()
         if provider is None:
-            logging.debug("No LLM API key found. Set GEMINI_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY.")
+            logging.warning("LLM expansion skipped: No API keys found (GEMINI_API_KEY/OPENAI_API_KEY/ANTHROPIC_API_KEY).")
             return []
     
     # Route to appropriate provider
