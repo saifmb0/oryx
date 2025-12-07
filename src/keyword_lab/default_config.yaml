@@ -94,3 +94,38 @@ llm:
 output:
   format: json  # json, csv, xlsx
   pretty_print: true
+
+# Keyword filtering settings
+filtering:
+  # Blacklist patterns - keywords matching these patterns are excluded
+  # Useful for removing navigational queries for competitors
+  # Example: ["login", "sign in", "my account", "support"]
+  blacklist: []
+  
+  # Minimum keyword length (in words)
+  min_words: 2
+  
+  # Maximum keyword length (in words) - long keywords are often scraping artifacts
+  max_words: 6
+  
+  # Minimum characters
+  min_chars: 5
+
+# Validation settings  
+validation:
+  # Enable Google Autocomplete validation
+  autocomplete_enabled: true
+  
+  # Maximum keywords to check via autocomplete (rate limiting)
+  max_autocomplete_checks: 100
+  
+  # Delay between autocomplete requests (seconds)
+  autocomplete_delay: 0.1
+
+# Quality assurance settings
+quality:
+  # Minimum keywords per cluster (clusters below this are discarded)
+  min_cluster_size: 3
+  
+  # Flag clusters with low entity density as "thin content risk"
+  entity_density_threshold: 0.3

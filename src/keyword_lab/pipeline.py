@@ -95,6 +95,32 @@ def run_pipeline(
     )
     candidates = list(dict.fromkeys([*candidates, *seed_cands, *llm_cands]))
 
+    # Apply blacklist and length filtering
+    filter_cfg = (config or {}).get("filtering", {})
+    blacklist = [b.lower() for b in filter_cfg.get("blacklist", [])]
+    min_words = int(filter_cfg.get("min_words", 2))
+    max_words = int(filter_cfg.get("max_words", 6))
+    min_chars = int(filter_cfg.get("min_chars", 5))
+    
+    def passes_filter(kw: str) -> bool:
+        kw_lower = kw.lower()
+        words = kw.split()
+        # Check blacklist
+        for bl in blacklist:
+            if bl in kw_lower:
+                return False
+        # Check length constraints
+        if len(words) < min_words or len(words) > max_words:
+            return False
+        if len(kw) < min_chars:
+            return False
+        return True
+    
+    candidates_before = len(candidates)
+    candidates = [c for c in candidates if passes_filter(c)]
+    if candidates_before > len(candidates):
+        logging.info(f"Filtered {candidates_before - len(candidates)} keywords (blacklist/length)")
+
     # Early exit if no candidates
     if not candidates:
         if output:
