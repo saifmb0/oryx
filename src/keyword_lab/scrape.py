@@ -55,6 +55,19 @@ class Document:
 # Google Autocomplete / Autosuggest API
 # ============================================================================
 
+# UAE/Gulf market language configurations
+# Bilingual markets need both Arabic and English suggestions
+BILINGUAL_GEO_CONFIG = {
+    "ae": ["en", "ar"],  # UAE: English primary, Arabic secondary
+    "sa": ["ar", "en"],  # Saudi: Arabic primary, English secondary
+    "qa": ["ar", "en"],  # Qatar
+    "kw": ["ar", "en"],  # Kuwait
+    "bh": ["ar", "en"],  # Bahrain
+    "om": ["ar", "en"],  # Oman
+    "eg": ["ar", "en"],  # Egypt
+}
+
+
 @lru_cache(maxsize=512)
 def get_google_suggestions(query: str, language: str = "en", country: str = "us") -> tuple:
     """
@@ -65,8 +78,8 @@ def get_google_suggestions(query: str, language: str = "en", country: str = "us"
     
     Args:
         query: Search query to get suggestions for
-        language: Language code (e.g., 'en')
-        country: Country code (e.g., 'us')
+        language: Language code (e.g., 'en', 'ar')
+        country: Country code (e.g., 'us', 'ae')
         
     Returns:
         Tuple of suggestion strings (tuple for hashability/caching)
@@ -79,8 +92,8 @@ def get_google_suggestions(query: str, language: str = "en", country: str = "us"
     params = {
         "client": "firefox",  # Returns clean JSON
         "q": query.strip(),
-        "hl": language,
-        "gl": country,
+        "hl": language,  # Host language
+        "gl": country,   # Geo location
     }
     
     try:
@@ -104,7 +117,7 @@ def get_google_suggestions(query: str, language: str = "en", country: str = "us"
                         s = s.strip().lower()
                         if s and s != query.lower():
                             cleaned.append(s)
-                logging.debug(f"Google suggestions for '{query}': {len(cleaned)} results")
+                logging.debug(f"Google suggestions for '{query}' (hl={language}, gl={country}): {len(cleaned)} results")
                 return tuple(cleaned)
     except Exception as e:
         logging.debug(f"Google autocomplete failed for '{query}': {e}")
@@ -112,11 +125,43 @@ def get_google_suggestions(query: str, language: str = "en", country: str = "us"
     return ()
 
 
+def get_bilingual_suggestions(
+    query: str,
+    country: str = "ae",
+    languages: Optional[List[str]] = None,
+) -> Dict[str, List[str]]:
+    """
+    Fetch autocomplete suggestions in multiple languages for bilingual markets.
+    
+    For UAE and Gulf markets, captures both Arabic and English search behavior.
+    
+    Args:
+        query: Search query
+        country: Country code (ae, sa, etc.)
+        languages: Optional list of language codes, auto-detected from country if None
+        
+    Returns:
+        Dict mapping language code to list of suggestions
+    """
+    if languages is None:
+        # Auto-detect languages for bilingual markets
+        languages = BILINGUAL_GEO_CONFIG.get(country.lower(), ["en"])
+    
+    results: Dict[str, List[str]] = {}
+    
+    for lang in languages:
+        suggestions = get_google_suggestions(query, language=lang, country=country)
+        results[lang] = list(suggestions)
+    
+    return results
+
+
 def validate_keywords_with_autocomplete(
     keywords: List[str],
     language: str = "en",
     country: str = "us",
     delay: float = 0.1,
+    bilingual: bool = False,
 ) -> Dict[str, bool]:
     """
     Validate a list of keywords against Google Autocomplete.
@@ -126,14 +171,19 @@ def validate_keywords_with_autocomplete(
     
     Args:
         keywords: List of keywords to validate
-        language: Language code
-        country: Country code
+        language: Primary language code
+        country: Country code (if 'ae'/'sa'/etc., enables bilingual checks)
         delay: Delay between requests to avoid rate limiting
+        bilingual: If True, check both languages for bilingual markets
         
     Returns:
         Dict mapping keyword -> validated (True if appears in autocomplete)
     """
     validated: Dict[str, bool] = {}
+    
+    # Determine if we should use bilingual validation
+    country_lower = country.lower()
+    use_bilingual = bilingual or country_lower in BILINGUAL_GEO_CONFIG
     
     for i, kw in enumerate(keywords):
         if not kw:
@@ -143,14 +193,24 @@ def validate_keywords_with_autocomplete(
         words = kw.split()
         prefix = " ".join(words[:2]) if len(words) > 2 else kw
         
-        suggestions = get_google_suggestions(prefix, language, country)
-        
-        # Check if the keyword (or close variant) appears in suggestions
         kw_lower = kw.lower()
-        is_validated = any(
-            kw_lower in s or s in kw_lower 
-            for s in suggestions
-        )
+        is_validated = False
+        
+        if use_bilingual:
+            # Check both languages for bilingual markets
+            bilingual_results = get_bilingual_suggestions(prefix, country_lower)
+            for lang, suggestions in bilingual_results.items():
+                if any(kw_lower in s or s in kw_lower for s in suggestions):
+                    is_validated = True
+                    break
+        else:
+            # Standard single-language check
+            suggestions = get_google_suggestions(prefix, language, country)
+            is_validated = any(
+                kw_lower in s or s in kw_lower 
+                for s in suggestions
+            )
+        
         validated[kw] = is_validated
         
         # Rate limiting - only delay if not cached
