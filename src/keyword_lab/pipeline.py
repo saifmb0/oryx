@@ -57,7 +57,7 @@ def run_pipeline(
     intent_rules = get_intent_rules(config or {})
     question_prefixes = get_question_prefixes(config or {})
 
-    # Acquire documents
+    # Acquire documents (with caching for faster iterations)
     docs = acquire_documents(
         sources=sources,
         query=query or seed_topic,
@@ -67,6 +67,8 @@ def run_pipeline(
         retries=int(scrape_cfg.get("retries", 2)),
         user_agent=str(scrape_cfg.get("user_agent", os.getenv("USER_AGENT", "keyword-lab/1.0"))),
         dry_run=dry_run,
+        use_cache=bool(scrape_cfg.get("cache_enabled", True)),
+        cache_dir=str(scrape_cfg.get("cache_dir", ".keyword_lab_cache")),
     )
 
     # Build pseudo-doc from seed_topic and audience if no content

@@ -1,15 +1,46 @@
+import hashlib
 import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import List, Dict, Optional
+from pathlib import Path
+from typing import List, Dict, Optional, Callable
 from urllib.parse import urlparse
 from urllib import robotparser
 
 import requests
 from bs4 import BeautifulSoup
 
+# Try to import joblib for caching
+try:
+    from joblib import Memory
+    HAS_JOBLIB = True
+except ImportError:
+    HAS_JOBLIB = False
+    Memory = None
+
 DEFAULT_UA = os.getenv("USER_AGENT", os.getenv("USER_AGENT", "keyword-lab/1.0"))
+DEFAULT_CACHE_DIR = ".keyword_lab_cache"
+
+# Global cache memory instance (initialized lazily)
+_cache_memory: Optional["Memory"] = None
+
+
+def _get_cache_memory(cache_dir: str = DEFAULT_CACHE_DIR) -> Optional["Memory"]:
+    """Get or create the cache memory instance."""
+    global _cache_memory
+    if not HAS_JOBLIB:
+        return None
+    if _cache_memory is None:
+        cache_path = Path(cache_dir)
+        cache_path.mkdir(parents=True, exist_ok=True)
+        _cache_memory = Memory(cache_path, verbose=0)
+    return _cache_memory
+
+
+def _url_hash(url: str) -> str:
+    """Generate a hash for URL-based cache key."""
+    return hashlib.md5(url.encode()).hexdigest()[:16]
 
 
 @dataclass
@@ -46,7 +77,15 @@ def _extract_visible_text(html: str) -> str:
     return "\n".join(texts)
 
 
-def fetch_url(url: str, timeout: int = 10, retries: int = 2, user_agent: str = DEFAULT_UA) -> Optional[Document]:
+def _fetch_url_uncached(
+    url: str, 
+    timeout: int = 10, 
+    retries: int = 2, 
+    user_agent: str = DEFAULT_UA
+) -> Optional[Dict]:
+    """
+    Internal fetch function that returns a dict (for caching serialization).
+    """
     if not _allowed_by_robots(url, user_agent):
         logging.info(f"Blocked by robots.txt: {url}")
         return None
@@ -62,12 +101,50 @@ def fetch_url(url: str, timeout: int = 10, retries: int = 2, user_agent: str = D
             text = _extract_visible_text(r.text)
             title = BeautifulSoup(r.text, "html.parser").title
             title_text = title.get_text(strip=True) if title else url
-            return Document(url=url, title=title_text, text=text)
+            return {"url": url, "title": title_text, "text": text}
         except Exception as e:
             last_exc = e
             time.sleep(0.5)
     logging.debug(f"Failed to fetch {url}: {last_exc}")
     return None
+
+
+def fetch_url(
+    url: str, 
+    timeout: int = 10, 
+    retries: int = 2, 
+    user_agent: str = DEFAULT_UA,
+    use_cache: bool = True,
+    cache_dir: str = DEFAULT_CACHE_DIR,
+) -> Optional[Document]:
+    """
+    Fetch a URL and return a Document.
+    
+    Args:
+        url: The URL to fetch
+        timeout: Request timeout in seconds
+        retries: Number of retries on failure
+        user_agent: User agent string
+        use_cache: Whether to use caching (requires joblib)
+        cache_dir: Directory for cache storage
+        
+    Returns:
+        Document object or None if fetch failed
+    """
+    result = None
+    
+    if use_cache and HAS_JOBLIB:
+        memory = _get_cache_memory(cache_dir)
+        if memory is not None:
+            cached_fetch = memory.cache(_fetch_url_uncached)
+            result = cached_fetch(url, timeout, retries, user_agent)
+    else:
+        result = _fetch_url_uncached(url, timeout, retries, user_agent)
+    
+    if result is None:
+        return None
+    
+    return Document(url=result["url"], title=result["title"], text=result["text"])
 
 
 def read_local_sources(path: str) -> List[Document]:
@@ -154,7 +231,27 @@ def acquire_documents(
     retries: int = 2,
     user_agent: str = DEFAULT_UA,
     dry_run: bool = False,
+    use_cache: bool = True,
+    cache_dir: str = DEFAULT_CACHE_DIR,
 ) -> List[Document]:
+    """
+    Acquire documents from various sources.
+    
+    Args:
+        sources: Path to local sources (file or directory)
+        query: Search query for SERP providers
+        provider: SERP provider (none, serpapi, bing)
+        max_serp_results: Maximum results from SERP
+        timeout: Request timeout
+        retries: Number of retries
+        user_agent: User agent string
+        dry_run: If True, skip network calls
+        use_cache: Enable URL caching (requires joblib)
+        cache_dir: Directory for cache storage
+        
+    Returns:
+        List of Document objects
+    """
     docs: List[Document] = []
 
     # Local sources
@@ -167,7 +264,14 @@ def acquire_documents(
     # If sources file listed URLs (text empty), fetch them now
     for i, d in enumerate(list(docs)):
         if d.text.strip() == "" and d.url.startswith("http"):
-            fetched = fetch_url(d.url, timeout=timeout, retries=retries, user_agent=user_agent)
+            fetched = fetch_url(
+                d.url, 
+                timeout=timeout, 
+                retries=retries, 
+                user_agent=user_agent,
+                use_cache=use_cache,
+                cache_dir=cache_dir,
+            )
             if fetched:
                 docs[i] = fetched
 
@@ -186,12 +290,19 @@ def acquire_documents(
                 results = _bing_search(query, key, max_results=max_serp_results)
             else:
                 logging.info("BING_API_KEY not set; skipping provider fetch")
-        # Fetch each result URL
+        # Fetch each result URL (with caching)
         for r in results:
             url = r.get("url")
             if not url:
                 continue
-            fetched = fetch_url(url, timeout=timeout, retries=retries, user_agent=user_agent)
+            fetched = fetch_url(
+                url, 
+                timeout=timeout, 
+                retries=retries, 
+                user_agent=user_agent,
+                use_cache=use_cache,
+                cache_dir=cache_dir,
+            )
             if fetched:
                 docs.append(fetched)
 
