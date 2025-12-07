@@ -1,5 +1,7 @@
 # Ruff configuration for keyword-lab
 # https://docs.astral.sh/ruff/
+# Line length
+line-length = 100
 
 [lint]
 # Enable these rule categories
@@ -33,5 +35,3 @@ known-first-party = ["keyword_lab"]
 quote-style = "double"
 # Indent with spaces
 indent-style = "space"
-# Line length
-line-length = 100
