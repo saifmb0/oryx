@@ -8,8 +8,12 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 try:
     from sentence_transformers import SentenceTransformer
     HAS_ST = True
-except Exception:
+except ImportError:
     HAS_ST = False
+    logging.debug(
+        "sentence-transformers not installed. Install with: pip install keyword-lab[ml]. "
+        "Falling back to TF-IDF vectorization."
+    )
 
 
 INTENT_RULES = {
