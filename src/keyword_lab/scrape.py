@@ -468,7 +468,14 @@ except ImportError:
 
 def _extract_visible_text(html: str, preserve_structure: bool = True) -> str:
     """
-    Extract visible text from HTML.
+    Extract visible text from HTML with enhanced noise filtering.
+    
+    Handles "noisy" DOMs common in legacy UAE contracting websites:
+    - Heavy JavaScript and inline scripts
+    - Cluttered footers with repeated contact info
+    - Cookie consent banners and popups
+    - Whatsapp/chat widgets
+    - Social media widgets
     
     Args:
         html: Raw HTML content
@@ -478,26 +485,112 @@ def _extract_visible_text(html: str, preserve_structure: bool = True) -> str:
     Returns:
         Extracted text content
     """
+    soup = BeautifulSoup(html, "html.parser")
+    
+    # ==========================================================================
+    # Phase 1: Remove obvious noise elements
+    # ==========================================================================
+    
+    # Standard non-content elements
+    noise_tags = [
+        "script", "style", "noscript", "iframe", "svg", "canvas",
+        "video", "audio", "source", "track",
+    ]
+    for tag in soup(noise_tags):
+        tag.decompose()
+    
+    # ==========================================================================
+    # Phase 2: Remove common UI noise (UAE/Gulf websites often have these)
+    # ==========================================================================
+    
+    # Common noise class/id patterns in UAE construction websites
+    noise_patterns = [
+        # Navigation and menus
+        "nav", "navbar", "navigation", "menu", "header-menu",
+        # Footers (often cluttered with repeated info)
+        "footer", "site-footer", "footer-widget", "footer-links",
+        # Sidebars
+        "sidebar", "widget", "widget-area",
+        # Popups and banners
+        "popup", "modal", "cookie", "gdpr", "consent", "banner",
+        # Chat widgets (WhatsApp is huge in UAE)
+        "whatsapp", "chat-widget", "livechat", "chatbot", "wa-button",
+        # Social
+        "social", "share", "follow-us",
+        # Ads
+        "advertisement", "ad-container", "sponsor",
+        # Forms (often irrelevant for content extraction)
+        "contact-form", "newsletter", "subscribe",
+    ]
+    
+    for pattern in noise_patterns:
+        # Remove by class
+        for el in soup.find_all(class_=lambda c: c and pattern in str(c).lower()):
+            el.decompose()
+        # Remove by id
+        for el in soup.find_all(id=lambda i: i and pattern in str(i).lower()):
+            el.decompose()
+    
+    # Remove common footer/header tags
+    for tag_name in ["footer", "nav", "aside"]:
+        for tag in soup.find_all(tag_name):
+            tag.decompose()
+    
+    # ==========================================================================
+    # Phase 3: Remove elements with suspicious patterns
+    # ==========================================================================
+    
+    # UAE-specific noise: phone numbers, WhatsApp links, repeated contact info
+    for el in soup.find_all(["a", "span", "div"]):
+        text = el.get_text(strip=True)
+        # Skip very short or very long elements
+        if len(text) < 3 or len(text) > 500:
+            continue
+        # WhatsApp links
+        if "wa.me" in str(el) or "whatsapp" in str(el).lower():
+            el.decompose()
+            continue
+        # Phone number patterns (UAE: +971, toll-free: 800)
+        if text.startswith(("+971", "971", "00971", "800")) and len(text) < 20:
+            el.decompose()
+            continue
+    
+    # ==========================================================================
+    # Phase 4: Extract content with structure preservation
+    # ==========================================================================
+    
     if preserve_structure and HAS_MARKDOWNIFY:
         try:
+            # Get cleaned HTML
+            cleaned_html = str(soup)
             # Convert to Markdown to preserve structure (headers, lists, etc.)
-            text = md(html, heading_style="ATX", strip=["script", "style", "noscript"])
+            text = md(cleaned_html, heading_style="ATX", strip=["script", "style", "noscript"])
             # Clean up excessive whitespace
             lines = [line.strip() for line in text.splitlines() if line.strip()]
-            return "\n".join(lines)
+            # Remove duplicate lines (common in noisy footers)
+            seen = set()
+            unique_lines = []
+            for line in lines:
+                line_normalized = line.lower().strip()
+                if line_normalized not in seen and len(line_normalized) > 2:
+                    seen.add(line_normalized)
+                    unique_lines.append(line)
+            return "\n".join(unique_lines)
         except Exception:
             pass
     
-    # Fallback to BeautifulSoup extraction
-    soup = BeautifulSoup(html, "html.parser")
-    for tag in soup(["script", "style", "noscript"]):
-        tag.decompose()
+    # Fallback: BeautifulSoup extraction with deduplication
     texts = []
-    for sel in ["h1", "h2", "h3", "p", "li"]:
+    seen = set()
+    for sel in ["h1", "h2", "h3", "h4", "p", "li", "td", "th"]:
         for el in soup.select(sel):
             t = el.get_text(" ", strip=True)
-            if t:
+            t_normalized = t.lower().strip()
+            # Skip duplicates and very short text
+            if t and t_normalized not in seen and len(t) > 5:
+                seen.add(t_normalized)
                 texts.append(t)
+    
     return "\n".join(texts)
 
 
