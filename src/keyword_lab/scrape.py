@@ -3,6 +3,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import List, Dict, Optional, Callable
 from urllib.parse import urlparse
@@ -50,13 +51,27 @@ class Document:
     text: str
 
 
+@lru_cache(maxsize=128)
+def _get_robots_parser(robots_url: str) -> robotparser.RobotFileParser:
+    """Cache robots.txt rules per domain to avoid repetitive fetching."""
+    rp = robotparser.RobotFileParser()
+    rp.set_url(robots_url)
+    try:
+        rp.read()
+    except Exception:
+        # If fetch fails, return empty parser (defaults to allowing)
+        pass
+    return rp
+
+
 def _allowed_by_robots(url: str, user_agent: str) -> bool:
     try:
         parsed = urlparse(url)
         robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
-        rp = robotparser.RobotFileParser()
-        rp.set_url(robots_url)
-        rp.read()
+        
+        # Use the cached parser instead of creating new one
+        rp = _get_robots_parser(robots_url)
+        
         allowed = rp.can_fetch(user_agent, url)
         return allowed
     except Exception as e:
