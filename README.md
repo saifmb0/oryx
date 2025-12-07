@@ -48,8 +48,7 @@ Example (snippet):
 ## 3‑step demo
 1) Create a virtual environment and install:
 - python -m venv .venv && source .venv/bin/activate
-- pip install -r requirements.txt
-- python -m nltk.downloader stopwords
+- pip install -e .
 
 2) (Optional) Enable better expansions:
 - cp .env.example .env

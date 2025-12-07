@@ -7,10 +7,10 @@ This guide contains the technical details you need to install, configure, and ru
 - Python 3.9+
 - Create and activate a virtual environment:
   - python -m venv .venv && source .venv/bin/activate
-- Install requirements:
-  - pip install -r requirements.txt
-- Download NLTK stopwords:
-  - python -m nltk.downloader stopwords
+- Install the package:
+  - pip install -e .
+- Or install with all optional features:
+  - pip install -e ".[all]"
 - Optional: copy environment file and add keys
   - cp .env.example .env
   - Add GEMINI_API_KEY=<your_key> (optional)
