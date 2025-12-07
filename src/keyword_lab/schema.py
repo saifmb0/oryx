@@ -12,7 +12,7 @@ COMPACT_SCHEMA = {
                 "informational", "commercial", "transactional", "navigational"
             ]},
             "funnel_stage": {"type": "string", "enum": ["TOFU", "MOFU", "BOFU"]},
-            "search_volume": {"type": "number", "minimum": 0, "maximum": 1},
+            "search_volume": {"type": "number", "minimum": 0},
             "difficulty": {"type": "number", "minimum": 0, "maximum": 1},
             "estimated": {"type": "boolean"},
             "opportunity_score": {"type": "number", "minimum": 0, "maximum": 1}
