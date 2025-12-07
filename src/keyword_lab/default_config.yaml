@@ -129,3 +129,22 @@ quality:
   
   # Flag clusters with low entity density as "thin content risk"
   entity_density_threshold: 0.3
+
+# QA validation settings (for 'keyword-lab qa' command)
+qa:
+  # Minimum keywords per cluster - clusters below this threshold are removed
+  min_cluster_size: 3
+  
+  # Maximum words per keyword - longer keywords are often scraping artifacts
+  max_word_count: 6
+  
+  # Minimum words per keyword - single words are often too broad
+  min_word_count: 2
+  
+  # Minimum opportunity score threshold (0.0-1.0)
+  # Set higher to focus on high-value keywords only
+  min_opportunity_score: 0.0
+  
+  # Minimum search volume threshold (0.0-1.0)
+  # Set higher to exclude low-volume long-tail keywords
+  min_search_volume: 0.0

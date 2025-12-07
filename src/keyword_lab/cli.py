@@ -383,6 +383,135 @@ Be concise. Format as bullet points."""
     return ""
 
 
+@app.command()
+def qa(
+    input_file: str = typer.Argument(
+        ...,
+        help="Path to keywords JSON file to validate",
+    ),
+    output: Optional[str] = typer.Option(
+        None,
+        "--output", "-o",
+        help="Output path for validated keywords (default: overwrites input)",
+    ),
+    min_cluster_size: int = typer.Option(
+        3,
+        "--min-cluster-size",
+        help="Minimum keywords per cluster (clusters with fewer are removed)",
+    ),
+    max_words: int = typer.Option(
+        6,
+        "--max-words",
+        help="Maximum words per keyword (longer keywords are removed)",
+    ),
+    min_words: int = typer.Option(
+        2,
+        "--min-words",
+        help="Minimum words per keyword (shorter keywords are removed)",
+    ),
+    min_opportunity: float = typer.Option(
+        0.0,
+        "--min-opportunity",
+        help="Minimum opportunity score (0-1, keywords below are removed)",
+    ),
+    min_volume: float = typer.Option(
+        0.0,
+        "--min-volume",
+        help="Minimum search volume score (0-1, keywords below are removed)",
+    ),
+    report: bool = typer.Option(
+        False,
+        "--report", "-r",
+        help="Print detailed QA report",
+    ),
+    dry_run: bool = typer.Option(
+        False,
+        "--dry-run",
+        help="Show what would be removed without making changes",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose", "-v",
+        help="Enable verbose output",
+    ),
+):
+    """
+    🔍 Run QA validation on keyword output.
+    
+    Validates and cleans pipeline output by:
+    - Removing clusters with fewer than minimum keywords
+    - Removing keywords that are too long or too short
+    - Removing keywords below score thresholds
+    
+    Example:
+        keyword-lab qa keywords.json --min-cluster-size 3 --max-words 6 --report
+    """
+    setup_logging(verbose)
+    
+    # Import QA module
+    from .qa import validate_pipeline_output, print_qa_report
+    
+    # Load input file
+    input_path = Path(input_file)
+    if not input_path.exists():
+        err_console.print(f"[red]Error:[/red] Input file not found: {input_file}")
+        raise typer.Exit(1)
+    
+    try:
+        with open(input_path) as f:
+            items = json.load(f)
+    except json.JSONDecodeError as e:
+        err_console.print(f"[red]Error:[/red] Invalid JSON: {e}")
+        raise typer.Exit(1)
+    
+    if not isinstance(items, list):
+        err_console.print("[red]Error:[/red] Expected JSON array of keyword items")
+        raise typer.Exit(1)
+    
+    console.print(f"\n[bold]📋 QA Validation[/bold]")
+    console.print(f"Input: {input_path}")
+    console.print(f"Keywords: {len(items)}")
+    console.print("")
+    
+    # Run validation
+    validated_items, qa_report = validate_pipeline_output(
+        items,
+        min_cluster_size=min_cluster_size,
+        max_word_count=max_words,
+        min_word_count=min_words,
+        min_opportunity_score=min_opportunity,
+        min_search_volume=min_volume,
+    )
+    
+    # Display summary
+    removed = qa_report["removed_count"]
+    removal_rate = qa_report["removal_rate"]
+    
+    if removed > 0:
+        color = "yellow" if removal_rate < 0.3 else "red"
+        console.print(f"[{color}]Removed:[/{color}] {removed} keywords ({removal_rate:.1%})")
+    else:
+        console.print("[green]No keywords removed - all passed QA[/green]")
+    
+    console.print(f"[bold green]Final:[/bold green] {len(validated_items)} keywords")
+    
+    # Print detailed report if requested
+    if report:
+        console.print("")
+        console.print(print_qa_report(qa_report, verbose=verbose))
+    
+    # Save output
+    if not dry_run:
+        output_path = Path(output) if output else input_path
+        
+        with open(output_path, "w") as f:
+            json.dump(validated_items, f, indent=2)
+        
+        console.print(f"\n[dim]Saved to:[/dim] {output_path}")
+    else:
+        console.print("\n[dim]--dry-run: No changes saved[/dim]")
+
+
 @app.callback(invoke_without_command=True)
 def main(ctx: typer.Context):
     """
