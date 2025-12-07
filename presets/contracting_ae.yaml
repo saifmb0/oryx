@@ -1,0 +1,183 @@
+# =============================================================================
+# Niche Preset: Contracting Companies in UAE
+# =============================================================================
+# This preset configures keyword-lab for the UAE construction/contracting market.
+# Use with: keyword-lab --preset presets/contracting_ae.yaml --seed "villa renovation"
+# =============================================================================
+
+# Market Configuration
+geo: "ae"
+language: "en"          # Primary language (Arabic handled via bilingual autocomplete)
+niche: "contracting"    # Enables niche-specific commercial scoring
+
+# Target Audience
+audience: "property owners, developers, facility managers in UAE"
+
+# Business Goals - Lead Generation Focus
+# For B2B contracting, leads > traffic (high-value transactions)
+business_goals: "leads, authority"
+
+# Time Horizon - Contracting projects are long-cycle
+time_horizon: "quarter"
+
+# Cluster Settings - Optimized for service categories
+max_clusters: 12
+max_keywords_per_cluster: 15
+
+# =============================================================================
+# UAE Contracting Market Terminology
+# =============================================================================
+# These terms help the LLM generate locale-specific keywords
+
+locale_terminology:
+  # UAE-specific construction terms
+  construction:
+    - "fit out"           # Interior finishing (very high-value in UAE)
+    - "fitout"            # Alternative spelling
+    - "turnkey"           # Complete project delivery
+    - "MEP"               # Mechanical, Electrical, Plumbing
+    - "HVAC"              # Heating, Ventilation, Air Conditioning
+    - "G+1"               # Ground + 1 floor (UAE building classification)
+    - "G+2"               # Ground + 2 floors
+    - "labour camp"       # Worker accommodation
+    - "warehouse"         # Industrial construction
+    - "portacabin"        # Temporary structures
+    
+  # UAE regulatory/permit terms
+  regulatory:
+    - "Musataha"          # Long-term land lease
+    - "DLD"               # Dubai Land Department
+    - "RERA"              # Real Estate Regulatory Agency
+    - "Civil Defense"     # Fire safety compliance
+    - "Municipality"      # Building permits
+    - "Ejari"             # Tenancy registration
+    - "Tawtheeq"          # Abu Dhabi tenancy registration
+    - "DEWA"              # Dubai Electricity & Water Authority
+    - "SEWA"              # Sharjah utility provider
+    - "FEWA"              # Federal utility provider
+    
+  # Project types in demand
+  project_types:
+    - "villa renovation"
+    - "apartment fit out"
+    - "office fit out"
+    - "retail fit out"
+    - "restaurant build out"
+    - "warehouse construction"
+    - "swimming pool construction"
+    - "landscaping"
+    - "extension"
+    - "partition walls"
+    - "false ceiling"
+    - "flooring installation"
+    
+  # High-intent commercial modifiers
+  commercial_modifiers:
+    - "companies"
+    - "contractors"
+    - "services"
+    - "quote"
+    - "cost"
+    - "price"
+    - "rates"
+    - "estimate"
+    - "near me"
+    - "in Dubai"
+    - "in Abu Dhabi"
+    - "in Sharjah"
+    
+  # B2B/Enterprise terms
+  b2b_terms:
+    - "commercial"
+    - "industrial"
+    - "corporate"
+    - "government"
+    - "facility management"
+    - "AMC"               # Annual Maintenance Contract
+    - "SLA"               # Service Level Agreement
+    - "PRO services"      # Public Relations Officer (visa/permits)
+
+# =============================================================================
+# Commercial Scoring Weights
+# =============================================================================
+# Higher weights for transactional/commercial intent (B2B lead gen)
+
+scoring:
+  commercial_weight: 0.35   # Boost commercial intent (default: 0.25)
+  difficulty_cap: 0.45      # Filter high-difficulty keywords
+  min_search_volume: 50     # Minimum monthly searches (UAE market is smaller)
+  
+  # Intent prioritization for lead generation
+  intent_weights:
+    transactional: 1.0      # Highest priority
+    commercial: 0.9         # High priority  
+    navigational: 0.5       # Medium priority
+    informational: 0.3      # Lower priority (but needed for content strategy)
+
+# =============================================================================
+# Competitor Analysis (Example UAE Contractors)
+# =============================================================================
+# Add your actual competitors here
+
+competitors:
+  - "example-contractor-1.ae"
+  - "example-contractor-2.com"
+  - "example-contractor-3.ae"
+
+# =============================================================================
+# Content Strategy Suggestions
+# =============================================================================
+# Recommended content clusters for UAE contracting market
+
+suggested_clusters:
+  - name: "Villa Services"
+    seeds:
+      - "villa renovation dubai"
+      - "villa maintenance dubai"
+      - "villa painting dubai"
+      - "villa landscaping dubai"
+      
+  - name: "Commercial Fit Out"
+    seeds:
+      - "office fit out dubai"
+      - "retail fit out dubai"
+      - "restaurant fit out dubai"
+      - "showroom fit out dubai"
+      
+  - name: "MEP Services"
+    seeds:
+      - "MEP contractor dubai"
+      - "HVAC installation dubai"
+      - "electrical contractor dubai"
+      - "plumbing contractor dubai"
+      
+  - name: "Renovation Services"
+    seeds:
+      - "bathroom renovation dubai"
+      - "kitchen renovation dubai"
+      - "flooring installation dubai"
+      - "false ceiling dubai"
+      
+  - name: "New Construction"
+    seeds:
+      - "warehouse construction dubai"
+      - "labour camp construction uae"
+      - "portacabin supplier uae"
+      - "steel structure uae"
+
+# =============================================================================
+# NLP Configuration
+# =============================================================================
+nlp:
+  ngram_min_df: 2
+  top_terms_per_doc: 10
+  # Arabic stopwords are automatically loaded for bilingual processing
+
+# =============================================================================
+# Scraping Configuration
+# =============================================================================
+scrape:
+  timeout: 15             # Slightly higher for Gulf region
+  retries: 3
+  max_serp_results: 10
+  # Bilingual autocomplete is automatic for geo: ae

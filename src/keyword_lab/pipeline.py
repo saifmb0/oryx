@@ -43,6 +43,7 @@ def run_pipeline(
     verbose: bool = False,
     config: Optional[Dict] = None,
     dry_run: bool = False,
+    niche: Optional[str] = None,
 ) -> List[Dict]:
     load_dotenv()
 
@@ -180,7 +181,12 @@ def run_pipeline(
         serp_total_results=None,  # TODO: pass per-keyword SERP counts when available
         validated_keywords=validated_keywords,
     )
-    opp = opportunity_scores(metrics, intents, business_goals)
+    
+    # Get commercial weight from config if available
+    scoring_cfg = (config or {}).get("scoring", {})
+    commercial_weight = float(scoring_cfg.get("commercial_weight", 0.25))
+    
+    opp = opportunity_scores(metrics, intents, business_goals, niche=niche, commercial_weight=commercial_weight)
 
     # Assign parent topics for hub-spoke SEO silo architecture
     parent_topic_cfg = (config or {}).get("parent_topics", {})

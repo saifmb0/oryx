@@ -99,6 +99,8 @@ def run(
     config_path: Optional[str] = typer.Option(None, "--config", help="YAML config (default: ./config.yaml if present)"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Log steps without network calls"),
     table_output: bool = typer.Option(False, "--table", help="Display results as a table instead of JSON"),
+    preset: Optional[str] = typer.Option(None, "--preset", help="Niche preset file (e.g., presets/contracting_ae.yaml)"),
+    niche: Optional[str] = typer.Option(None, "--niche", help="Niche for commercial scoring (contracting, real_estate, legal)"),
 ):
     """
     Run the keyword discovery pipeline.
@@ -115,7 +117,7 @@ def run(
 
     # Load config with defaults and validation
     try:
-        cfg = load_config(config_path)
+        cfg = load_config(config_path, preset_path=preset)
     except ConfigValidationError as e:
         err_console.print(f"[bold red]Configuration Error:[/bold red]")
         for error in e.errors:
@@ -123,14 +125,27 @@ def run(
         err_console.print("\n[dim]Check your config.yaml for typos or invalid values.[/dim]")
         sys.exit(2)
 
+    # Override with preset values if present
+    if preset and cfg:
+        geo = cfg.get("geo", geo)
+        language = cfg.get("language", language)
+        audience = cfg.get("audience", audience) if audience == typer.prompt("👥 Enter target audience") else audience
+        business_goals = cfg.get("business_goals", business_goals)
+        max_clusters = cfg.get("max_clusters", max_clusters)
+        max_keywords_per_cluster = cfg.get("max_keywords_per_cluster", max_keywords_per_cluster)
+        
+    # Get niche from preset or CLI
+    effective_niche = niche or cfg.get("niche") if cfg else niche
+
     comp_list: List[str] = [c.strip() for c in competitors.split(",") if c.strip()]
 
     # Show a panel with run configuration
     if not verbose:
+        niche_display = f" | [bold]Niche:[/bold] {effective_niche}" if effective_niche else ""
         console.print(Panel(
             f"[bold]Seed:[/bold] {seed_topic}\n"
             f"[bold]Audience:[/bold] {audience}\n"
-            f"[bold]Geo:[/bold] {geo} | [bold]Language:[/bold] {language}",
+            f"[bold]Geo:[/bold] {geo} | [bold]Language:[/bold] {language}{niche_display}",
             title="🔬 Keyword Lab",
             border_style="blue",
         ))
@@ -154,6 +169,7 @@ def run(
         verbose=verbose,
         config=cfg,
         dry_run=dry_run,
+        niche=effective_niche,
     )
 
     # Output display

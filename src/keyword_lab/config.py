@@ -196,16 +196,56 @@ def load_default_config() -> Dict[str, Any]:
     return {}
 
 
-def load_config(config_path: Optional[str] = None, validate: bool = True) -> KeywordLabConfig:
+def load_preset(preset_path: str) -> Dict[str, Any]:
     """
-    Load configuration, merging user config with defaults.
+    Load a niche-specific preset file.
+    
+    Presets are YAML files containing market/locale-specific configurations
+    such as geo, language, niche terminology, and scoring weights.
+    
+    Args:
+        preset_path: Path to preset YAML file (e.g., "presets/contracting_ae.yaml")
+        
+    Returns:
+        Preset configuration dictionary
+        
+    Raises:
+        FileNotFoundError: If preset file doesn't exist
+        ConfigValidationError: If preset is malformed
+        
+    Example:
+        >>> preset = load_preset("presets/contracting_ae.yaml")
+        >>> print(preset["geo"])  # "ae"
+        >>> print(preset["niche"])  # "contracting"
+    """
+    preset_file = Path(preset_path)
+    if not preset_file.exists():
+        raise FileNotFoundError(f"Preset file not found: {preset_path}")
+    
+    try:
+        preset = yaml.safe_load(preset_file.read_text()) or {}
+        logging.info(f"Loaded preset from {preset_path}")
+        return preset
+    except yaml.YAMLError as e:
+        raise ConfigValidationError([f"Failed to parse preset {preset_path}: {e}"])
+
+
+def load_config(
+    config_path: Optional[str] = None, 
+    preset_path: Optional[str] = None,
+    validate: bool = True
+) -> KeywordLabConfig:
+    """
+    Load configuration, merging preset and user config with defaults.
     
     Priority (highest to lowest):
     1. User config file (explicit --config or ./config.yaml)
-    2. Default config bundled with package
+    2. Preset file (--preset for niche-specific settings)
+    3. Default config bundled with package
     
     Args:
         config_path: Optional path to user config file
+        preset_path: Optional path to niche preset file (e.g., presets/contracting_ae.yaml)
         validate: Whether to validate config against schema
         
     Returns:
@@ -213,9 +253,21 @@ def load_config(config_path: Optional[str] = None, validate: bool = True) -> Key
         
     Raises:
         ConfigValidationError: If validation is enabled and config is invalid
+        
+    Example:
+        >>> # Load with UAE contracting preset
+        >>> config = load_config(preset_path="presets/contracting_ae.yaml")
+        >>> print(config.get("geo"))  # "ae"
+        >>> print(config.get("niche"))  # "contracting"
     """
     # Start with defaults
     config = load_default_config()
+    
+    # Merge preset if provided (before user config, so user can override)
+    if preset_path:
+        preset = load_preset(preset_path)
+        config = _deep_merge(config, preset)
+        logging.debug(f"Merged preset from {preset_path}")
     
     # Determine user config path
     user_config_path = Path(config_path) if config_path else Path("config.yaml")
