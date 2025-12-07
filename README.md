@@ -23,6 +23,17 @@ A powerful CLI tool that transforms seed topics into validated, ranked SEO keywo
 - 🔍 **PAA Extraction** - People Also Ask questions from SerpAPI
 - ⚡ **Weighted HTML Extraction** - Priority extraction of H1-H3, meta, alt text
 
+### New in v3.0 - UAE/Gulf Market Specialization
+- 🇦🇪 **Arabic/English Bilingual Support** - Unicode text preprocessing, Arabic stopwords
+- 🌍 **Multilingual Embeddings** - paraphrase-multilingual-MiniLM-L12-v2 for Arabic clustering
+- 🔤 **Bilingual Autocomplete** - Fetch suggestions in both English and Arabic
+- 🏢 **UAE Entity Extraction** - Emirates, districts, landmarks, free zones
+- 💰 **Commercial Intent Scoring** - CPC proxy heuristics for lead-value optimization
+- 📉 **SERP Feature CTR Adjustment** - Realistic opportunity scores accounting for featured snippets
+- 🎯 **Niche Presets** - Ready-to-use configs for contracting, real estate, legal
+- 📋 **GEO Content Briefs** - UAE-specific regulatory requirements and local trust signals
+- 📊 **Enhanced Excel Export** - Location analysis, intent breakdown, priority matrix
+
 ## 🚀 Quick Start
 
 ### Installation
@@ -66,6 +77,8 @@ Each keyword item includes:
 | `funnel_stage` | enum | `TOFU`, `MOFU`, or `BOFU` |
 | `search_volume` | 0–1 | Relative search volume (percentile) |
 | `difficulty` | 0–1 | Competition difficulty estimate |
+| `ctr_potential` | 0–1 | Organic CTR potential (SERP feature adjusted) |
+| `serp_features` | array | Detected SERP features affecting CTR |
 | `estimated` | boolean | True if metrics are estimated |
 | `validated` | boolean | True if confirmed via Autocomplete |
 | `opportunity_score` | 0–1 | Combined opportunity metric |
@@ -207,6 +220,92 @@ brief = generate_brief_with_llm(
     intents={"how to brew coffee": "informational"}
 )
 ```
+
+## 🇦🇪 UAE/Gulf Market Specialization
+
+Keyword Lab v3.0 includes specialized features for the UAE and Gulf markets.
+
+### Using Niche Presets
+
+```bash
+# Use the UAE contracting preset
+keyword-lab run \
+  --seed-topic "villa renovation dubai" \
+  --audience "property owners in UAE" \
+  --preset presets/contracting_ae.yaml \
+  --output keywords.json
+```
+
+### GEO-Enhanced Content Briefs
+
+Generate briefs with UAE-specific requirements:
+
+```bash
+# Generate a GEO brief for UAE contracting market
+keyword-lab geo-brief keywords.json \
+  --geo ae \
+  --niche contracting \
+  --output brief.md
+```
+
+The GEO brief includes:
+- Geographic entity analysis (Emirates, districts)
+- UAE regulatory requirements checklist
+- Local trust signals recommendations
+- Location variant suggestions
+
+### Entity Extraction
+
+Extract UAE geographic entities from keywords:
+
+```python
+from keyword_lab.entities import extract_entities
+
+entities = extract_entities("villa renovation dubai marina", geo="ae")
+# Returns: {
+#   "emirate": "Dubai",
+#   "district": "Dubai Marina",
+#   "is_local": True,
+#   "location_type": "residential"
+# }
+```
+
+### Commercial Intent Scoring
+
+Score keywords for lead generation value:
+
+```python
+from keyword_lab.metrics import commercial_value
+
+score = commercial_value(
+    "villa fit out contractors quote",
+    intent="transactional",
+    geo="ae",
+    niche="contracting"
+)
+# Returns: 0.85 (high commercial value)
+```
+
+### Content Gap Analysis
+
+Identify content opportunities:
+
+```python
+from keyword_lab.content_gap import analyze_content_gaps
+
+gaps = analyze_content_gaps(
+    target_keywords=["villa renovation dubai", "office fit out abu dhabi"],
+    existing_content=[{"url": "...", "keywords": [...]}]
+)
+```
+
+### UAE Districts & Free Zones
+
+The entity extraction includes:
+- **7 Emirates**: Dubai, Abu Dhabi, Sharjah, Ajman, RAK, Fujairah, UAQ
+- **25+ Districts**: Dubai Marina, Business Bay, JBR, Al Barsha, etc.
+- **Landmarks**: Burj Khalifa, Dubai Mall, Mall of the Emirates
+- **Free Zones**: JAFZA, DMCC, DAFZA, TECOM, KIZAD
 
 ## 🏗️ Architecture
 
