@@ -1,180 +1,202 @@
-"""Configuration loading, merging, and validation for Keyword Lab."""
+"""
+Configuration loading, merging, and validation for ORYX (Keyword Lab).
+
+Uses Pydantic V2 for strict validation with enterprise-grade error messages.
+"""
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-from typing_extensions import TypedDict, NotRequired
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
 import yaml
-from jsonschema import Draft7Validator, ValidationError
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 
 
 # ============================================================================
-# Typed Configuration Dictionaries
+# Pydantic Configuration Models
 # ============================================================================
 
-class IntentRulesConfig(TypedDict, total=False):
+class IntentRulesConfig(BaseModel):
     """Intent classification rules mapping intent types to keyword patterns."""
-    informational: List[str]
-    commercial: List[str]
-    transactional: List[str]
-    navigational: List[str]
-
-
-class NlpConfig(TypedDict, total=False):
-    """NLP processing configuration."""
-    ngram_min_df: int
-    ngram_range: Tuple[int, int]
-    top_terms_per_doc: int
-
-
-class ScrapeConfig(TypedDict, total=False):
-    """Web scraping configuration."""
-    timeout: int
-    retries: int
-    user_agent: str
-    max_serp_results: int
-    cache_enabled: bool
-    cache_dir: str
-
-
-class ClusterConfig(TypedDict, total=False):
-    """Clustering algorithm configuration."""
-    max_clusters: int
-    max_keywords_per_cluster: int
-    random_state: int
-    use_silhouette: bool
-    silhouette_k_range: Tuple[int, int]
-
-
-class LlmConfig(TypedDict, total=False):
-    """LLM provider configuration."""
-    provider: str  # "auto", "gemini", "openai", "anthropic", "none"
-    max_expansion_results: int
-    model: Optional[str]
-
-
-class OutputConfig(TypedDict, total=False):
-    """Output format configuration."""
-    format: str  # "json", "csv", "xlsx"
-    pretty_print: bool
-
-
-class KeywordLabConfig(TypedDict, total=False):
-    """
-    Complete Keyword Lab configuration schema.
     
-    All fields are optional as they fall back to defaults.
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    
+    informational: List[str] = Field(
+        default=["who", "what", "why", "how", "guide", "tutorial", "tips", "checklist", "template"],
+        description="Keywords triggering informational intent"
+    )
+    commercial: List[str] = Field(
+        default=["best", "top", "review", "compare", "vs", "alternatives", "pricing"],
+        description="Keywords triggering commercial intent"
+    )
+    transactional: List[str] = Field(
+        default=["buy", "discount", "coupon", "deal", "near me", "order", "book", "hire"],
+        description="Keywords triggering transactional intent"
+    )
+    navigational: List[str] = Field(
+        default=[],
+        description="Keywords triggering navigational intent"
+    )
+    # GEO-centric intents (for AI search optimization)
+    direct_answer: List[str] = Field(
+        default=["what is", "define", "meaning of", "cost of"],
+        description="Keywords suitable for AI direct answers"
+    )
+    local: List[str] = Field(
+        default=["near me", "in dubai", "in abu dhabi", "in uae", "dubai", "abu dhabi"],
+        description="Keywords triggering local intent"
+    )
+
+
+class NlpConfig(BaseModel):
+    """NLP processing configuration."""
+    
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    
+    ngram_min_df: int = Field(default=2, ge=1, description="Minimum document frequency for n-grams")
+    ngram_range: Tuple[int, int] = Field(default=(1, 3), description="Range of n-gram sizes")
+    top_terms_per_doc: int = Field(default=10, ge=1, description="Top terms to extract per document")
+    
+    @field_validator("ngram_range")
+    @classmethod
+    def validate_ngram_range(cls, v: Tuple[int, int]) -> Tuple[int, int]:
+        if v[0] < 1 or v[1] < v[0]:
+            raise ValueError(f"ngram_range must be (min, max) where min >= 1 and max >= min, got {v}")
+        return v
+
+
+class ScrapeConfig(BaseModel):
+    """Web scraping configuration with UAE-specific defaults."""
+    
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    
+    timeout: int = Field(default=30, ge=1, le=120, description="Request timeout in seconds")
+    retries: int = Field(default=3, ge=0, le=10, description="Number of retry attempts")
+    user_agent: str = Field(
+        default="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        description="User agent string for requests"
+    )
+    max_serp_results: int = Field(default=10, ge=1, le=100, description="Max SERP results to fetch")
+    cache_enabled: bool = Field(default=True, description="Enable request caching")
+    cache_dir: str = Field(default=".cache/scrape", description="Cache directory path")
+    
+    # UAE/Gulf proxy configuration
+    proxy_enabled: bool = Field(default=False, description="Enable proxy rotation")
+    proxy_urls: List[str] = Field(default=[], description="List of proxy URLs")
+    
+    # Rate limiting for respectful scraping
+    min_delay_ms: int = Field(default=500, ge=0, description="Minimum delay between requests (ms)")
+    max_delay_ms: int = Field(default=2000, ge=0, description="Maximum delay between requests (ms)")
+    
+    @model_validator(mode="after")
+    def validate_delays(self) -> "ScrapeConfig":
+        if self.max_delay_ms < self.min_delay_ms:
+            raise ValueError(f"max_delay_ms ({self.max_delay_ms}) must be >= min_delay_ms ({self.min_delay_ms})")
+        return self
+
+
+class ClusterConfig(BaseModel):
+    """Clustering algorithm configuration."""
+    
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    
+    max_clusters: int = Field(default=15, ge=1, le=100, description="Maximum number of clusters")
+    max_keywords_per_cluster: int = Field(default=20, ge=1, description="Max keywords per cluster")
+    random_state: int = Field(default=42, description="Random seed for reproducibility")
+    use_silhouette: bool = Field(default=True, description="Use silhouette scoring for optimal k")
+    silhouette_k_range: Tuple[int, int] = Field(default=(3, 15), description="Range for silhouette k search")
+    
+    @field_validator("silhouette_k_range")
+    @classmethod
+    def validate_k_range(cls, v: Tuple[int, int]) -> Tuple[int, int]:
+        if v[0] < 2 or v[1] <= v[0]:
+            raise ValueError(f"silhouette_k_range must be (min, max) where min >= 2 and max > min, got {v}")
+        return v
+
+
+class LlmConfig(BaseModel):
+    """LLM provider configuration."""
+    
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    
+    provider: Literal["auto", "gemini", "openai", "anthropic", "none"] = Field(
+        default="auto", description="LLM provider to use"
+    )
+    max_expansion_results: int = Field(default=10, ge=1, le=50, description="Max keyword expansion results")
+    model: Optional[str] = Field(default=None, description="Specific model name (e.g., 'gemini-1.5-pro')")
+    temperature: float = Field(default=0.7, ge=0.0, le=2.0, description="LLM temperature")
+    max_tokens: int = Field(default=2048, ge=100, le=16384, description="Max tokens per request")
+
+
+class OutputConfig(BaseModel):
+    """Output format configuration."""
+    
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    
+    format: Literal["json", "csv", "xlsx"] = Field(default="json", description="Output file format")
+    pretty_print: bool = Field(default=True, description="Pretty-print JSON output")
+    include_metadata: bool = Field(default=True, description="Include pipeline metadata in output")
+
+
+class GeoConfig(BaseModel):
+    """Geographic/locale configuration for UAE market."""
+    
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    
+    region: str = Field(default="ae", description="Target region code")
+    locale: str = Field(default="en-AE", description="Locale for search queries")
+    emirates: List[str] = Field(
+        default=["Abu Dhabi", "Dubai", "Sharjah", "Ajman", "RAK", "Fujairah", "UAQ"],
+        description="Target emirates list"
+    )
+    primary_emirate: str = Field(default="Abu Dhabi", description="Primary target emirate")
+    currency: str = Field(default="AED", description="Currency code")
+    bilingual: bool = Field(default=True, description="Enable Arabic-English bilingual processing")
+
+
+class KeywordLabConfig(BaseModel):
+    """
+    Complete ORYX (Keyword Lab) configuration schema.
+    
+    All fields have sensible UAE-focused defaults.
     Use load_config() to get a fully merged configuration.
     
     Example:
         >>> config = load_config("config.yaml")
-        >>> clusters = config.get("cluster", {}).get("max_clusters", 10)
+        >>> clusters = config.cluster.max_clusters
     """
-    intent_rules: IntentRulesConfig
-    question_prefixes: List[str]
-    nlp: NlpConfig
-    scrape: ScrapeConfig
-    cluster: ClusterConfig
-    llm: LlmConfig
-    output: OutputConfig
+    
+    model_config = ConfigDict(extra="allow", frozen=False)  # Allow extra for flexibility
+    
+    intent_rules: IntentRulesConfig = Field(default_factory=IntentRulesConfig)
+    question_prefixes: List[str] = Field(
+        default=["how", "what", "best", "vs", "for", "near me", "beginner", "advanced", 
+                 "guide", "checklist", "template", "why", "cost", "price", "cheap"],
+        description="Prefixes for question generation"
+    )
+    nlp: NlpConfig = Field(default_factory=NlpConfig)
+    scrape: ScrapeConfig = Field(default_factory=ScrapeConfig)
+    cluster: ClusterConfig = Field(default_factory=ClusterConfig)
+    llm: LlmConfig = Field(default_factory=LlmConfig)
+    output: OutputConfig = Field(default_factory=OutputConfig)
+    geo: GeoConfig = Field(default_factory=GeoConfig)
+    
+    # Niche-specific metadata (from presets)
+    niche: Optional[str] = Field(default=None, description="Target niche (e.g., 'contracting')")
+    preset_name: Optional[str] = Field(default=None, description="Loaded preset name")
 
 
-# JSON Schema for config validation
-CONFIG_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "intent_rules": {
-            "type": "object",
-            "properties": {
-                "informational": {"type": "array", "items": {"type": "string"}},
-                "commercial": {"type": "array", "items": {"type": "string"}},
-                "transactional": {"type": "array", "items": {"type": "string"}},
-                "navigational": {"type": "array", "items": {"type": "string"}},
-            },
-            "additionalProperties": False,
-        },
-        "question_prefixes": {"type": "array", "items": {"type": "string"}},
-        "nlp": {
-            "type": "object",
-            "properties": {
-                "ngram_min_df": {"type": "integer", "minimum": 1},
-                "ngram_range": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2},
-                "top_terms_per_doc": {"type": "integer", "minimum": 1},
-            },
-            "additionalProperties": False,
-        },
-        "scrape": {
-            "type": "object",
-            "properties": {
-                "timeout": {"type": "integer", "minimum": 1},
-                "retries": {"type": "integer", "minimum": 0},
-                "user_agent": {"type": "string"},
-                "max_serp_results": {"type": "integer", "minimum": 1},
-                "cache_enabled": {"type": "boolean"},
-                "cache_dir": {"type": "string"},
-            },
-            "additionalProperties": False,
-        },
-        "cluster": {
-            "type": "object",
-            "properties": {
-                "max_clusters": {"type": "integer", "minimum": 1},
-                "max_keywords_per_cluster": {"type": "integer", "minimum": 1},
-                "random_state": {"type": "integer"},
-                "use_silhouette": {"type": "boolean"},
-                "silhouette_k_range": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2},
-            },
-            "additionalProperties": False,
-        },
-        "llm": {
-            "type": "object",
-            "properties": {
-                "provider": {"type": "string", "enum": ["auto", "gemini", "openai", "anthropic", "none"]},
-                "max_expansion_results": {"type": "integer", "minimum": 1},
-                "model": {"type": ["string", "null"]},
-            },
-            "additionalProperties": False,
-        },
-        "output": {
-            "type": "object",
-            "properties": {
-                "format": {"type": "string", "enum": ["json", "csv", "xlsx"]},
-                "pretty_print": {"type": "boolean"},
-            },
-            "additionalProperties": False,
-        },
-    },
-    "additionalProperties": True,  # Allow extra top-level keys for flexibility
-}
-
-_config_validator = Draft7Validator(CONFIG_SCHEMA)
-
+# ============================================================================
+# Configuration Loading Functions
+# ============================================================================
 
 class ConfigValidationError(Exception):
-    """Raised when config validation fails."""
+    """Raised when config validation fails with detailed Pydantic errors."""
     
     def __init__(self, errors: List[str]):
         self.errors = errors
         message = "Configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
         super().__init__(message)
-
-
-def validate_config(config: Dict[str, Any]) -> List[str]:
-    """
-    Validate configuration against schema.
-    
-    Args:
-        config: Configuration dictionary to validate
-        
-    Returns:
-        List of validation error messages (empty if valid)
-    """
-    errors = []
-    for error in _config_validator.iter_errors(config):
-        path = ".".join(str(p) for p in error.path) if error.path else "(root)"
-        errors.append(f"{path}: {error.message}")
-    return errors
 
 
 def _deep_merge(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
@@ -215,7 +237,7 @@ def load_preset(preset_path: str) -> Dict[str, Any]:
         
     Example:
         >>> preset = load_preset("presets/contracting_ae.yaml")
-        >>> print(preset["geo"])  # "ae"
+        >>> print(preset["geo"]["region"])  # "ae"
         >>> print(preset["niche"])  # "contracting"
     """
     preset_file = Path(preset_path)
@@ -224,6 +246,7 @@ def load_preset(preset_path: str) -> Dict[str, Any]:
     
     try:
         preset = yaml.safe_load(preset_file.read_text()) or {}
+        preset["preset_name"] = preset_file.stem
         logging.info(f"Loaded preset from {preset_path}")
         return preset
     except yaml.YAMLError as e:
@@ -245,28 +268,27 @@ def load_config(
     
     Args:
         config_path: Optional path to user config file
-        preset_path: Optional path to niche preset file (e.g., presets/contracting_ae.yaml)
-        validate: Whether to validate config against schema
+        preset_path: Optional path to niche preset file
+        validate: Whether to validate config (always True with Pydantic)
         
     Returns:
-        Merged configuration dictionary with type hints
+        Validated KeywordLabConfig instance
         
     Raises:
-        ConfigValidationError: If validation is enabled and config is invalid
+        ConfigValidationError: If config is invalid
         
     Example:
-        >>> # Load with UAE contracting preset
         >>> config = load_config(preset_path="presets/contracting_ae.yaml")
-        >>> print(config.get("geo"))  # "ae"
-        >>> print(config.get("niche"))  # "contracting"
+        >>> print(config.geo.region)  # "ae"
+        >>> print(config.niche)  # "contracting"
     """
     # Start with defaults
-    config = load_default_config()
+    config_dict = load_default_config()
     
-    # Merge preset if provided (before user config, so user can override)
+    # Merge preset if provided
     if preset_path:
         preset = load_preset(preset_path)
-        config = _deep_merge(config, preset)
+        config_dict = _deep_merge(config_dict, preset)
         logging.debug(f"Merged preset from {preset_path}")
     
     # Determine user config path
@@ -276,33 +298,28 @@ def load_config(
     if user_config_path.exists():
         try:
             user_config = yaml.safe_load(user_config_path.read_text()) or {}
-            config = _deep_merge(config, user_config)
+            config_dict = _deep_merge(config_dict, user_config)
             logging.debug(f"Loaded user config from {user_config_path}")
         except Exception as e:
             logging.warning(f"Failed to read config {user_config_path}: {e}")
     
-    # Validate merged config
-    if validate:
-        errors = validate_config(config)
-        if errors:
+    # Validate and create Pydantic model
+    try:
+        return KeywordLabConfig(**config_dict)
+    except Exception as e:
+        # Convert Pydantic validation errors to our format
+        from pydantic import ValidationError
+        if isinstance(e, ValidationError):
+            errors = [f"{err['loc']}: {err['msg']}" for err in e.errors()]
             raise ConfigValidationError(errors)
-    
-    return config
+        raise
 
 
 def get_intent_rules(config: KeywordLabConfig) -> IntentRulesConfig:
-    """Get intent rules from config, with fallback defaults."""
-    return config.get("intent_rules", {
-        "informational": ["who", "what", "why", "how", "guide", "tutorial", "tips", "checklist", "template"],
-        "commercial": ["best", "top", "review", "compare", "vs", "alternatives", "pricing"],
-        "transactional": ["buy", "discount", "coupon", "deal", "near me"],
-        "navigational": [],
-    })
+    """Get intent rules from config."""
+    return config.intent_rules
 
 
 def get_question_prefixes(config: KeywordLabConfig) -> List[str]:
-    """Get question prefixes from config, with fallback defaults."""
-    return config.get("question_prefixes", [
-        "how", "what", "best", "vs", "for", "near me", 
-        "beginner", "advanced", "guide", "checklist", "template", "why"
-    ])
+    """Get question prefixes from config."""
+    return config.question_prefixes

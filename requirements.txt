@@ -20,7 +20,9 @@ typer>=0.9.0,<1.0.0
 rich>=13.0.0,<14.0.0
 python-dotenv>=1.0.0,<2.0.0
 pyyaml>=6.0,<7.0.0
-jsonschema>=4.17.0,<5.0.0
+pydantic>=2.5.0,<3.0.0  # Strict data validation
+pydantic-settings>=2.1.0,<3.0.0  # Settings management
+jsonschema>=4.17.0,<5.0.0  # Legacy schema support
 
 # AI/ML APIs
 google-generativeai>=0.8.0,<1.0.0
