@@ -5,15 +5,15 @@ from typing import Dict, List, Optional
 
 import numpy as np
 from dotenv import load_dotenv
-import yaml
 
 from .scrape import acquire_documents, Document
-from .nlp import generate_candidates, clean_text, QUESTION_PREFIXES, seed_expansions
+from .nlp import generate_candidates, clean_text, DEFAULT_QUESTION_PREFIXES, seed_expansions
 from .cluster import cluster_keywords, infer_intent
 from .metrics import compute_metrics, opportunity_scores
 from .schema import validate_items
 from .io import write_json, write_csv
-from .llm import expand_with_gemini
+from .llm import expand_with_llm
+from .config import load_config, get_intent_rules, get_question_prefixes
 
 
 def to_funnel_stage(intent: str) -> str:
@@ -49,8 +49,13 @@ def run_pipeline(
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
+    # Get config sections
     nlp_cfg = (config or {}).get("nlp", {})
     scrape_cfg = (config or {}).get("scrape", {})
+    
+    # Get configurable rules
+    intent_rules = get_intent_rules(config or {})
+    question_prefixes = get_question_prefixes(config or {})
 
     # Acquire documents
     docs = acquire_documents(
@@ -74,12 +79,19 @@ def run_pipeline(
         doc_dicts,
         ngram_min_df=int(nlp_cfg.get("ngram_min_df", 2)),
         top_terms_per_doc=int(nlp_cfg.get("top_terms_per_doc", 10)),
+        question_prefixes=question_prefixes,
     )
 
-    # Seed-based and Gemini expansions
+    # Seed-based and LLM expansions
     seed_cands = seed_expansions(seed_topic, audience)
-    gemini_cands = expand_with_gemini(seed_topic, audience, language, geo, max_results=50)
-    candidates = list(dict.fromkeys([*candidates, *seed_cands, *gemini_cands]))
+    llm_cfg = (config or {}).get("llm", {})
+    llm_cands = expand_with_llm(
+        seed_topic, audience, language, geo, 
+        max_results=int(llm_cfg.get("max_expansion_results", 50)),
+        provider=llm_cfg.get("provider", "auto"),
+        model=llm_cfg.get("model"),
+    )
+    candidates = list(dict.fromkeys([*candidates, *seed_cands, *llm_cands]))
 
     # Early exit if no candidates
     if not candidates:
@@ -92,7 +104,7 @@ def run_pipeline(
     # Detect question-style keywords for volume boost
     qset = set()
     for kw in candidates:
-        for pref in QUESTION_PREFIXES:
+        for pref in question_prefixes:
             if kw.startswith(pref + " "):
                 qset.add(kw)
                 break
@@ -112,9 +124,9 @@ def run_pipeline(
     # Cluster
     clusters = cluster_keywords(candidates, max_clusters=max_clusters)
 
-    # Intent mapping
+    # Intent mapping using configurable rules
     competitor_list = [c.strip() for c in (competitors or []) if c.strip()]
-    intents = {kw: infer_intent(kw, competitor_list) for kw in candidates}
+    intents = {kw: infer_intent(kw, competitor_list, intent_rules) for kw in candidates}
 
     # Metrics (0–1 scale)
     serp_total = None

@@ -1,0 +1,96 @@
+# Default configuration for Keyword Lab
+# Users can override any of these values in their own config.yaml
+
+# Intent detection rules - maps intent type to trigger words/phrases
+# Customize these to match your domain (e.g., add "demo" to transactional)
+intent_rules:
+  informational:
+    - who
+    - what
+    - why
+    - how
+    - guide
+    - tutorial
+    - tips
+    - checklist
+    - template
+    - learn
+    - understand
+    - explain
+  commercial:
+    - best
+    - top
+    - review
+    - compare
+    - vs
+    - alternatives
+    - pricing
+    - comparison
+    - rated
+  transactional:
+    - buy
+    - discount
+    - coupon
+    - deal
+    - near me
+    - purchase
+    - order
+    - shop
+    - price
+  navigational: []
+
+# Question prefixes used for generating question-style keywords
+question_prefixes:
+  - how
+  - what
+  - best
+  - vs
+  - for
+  - near me
+  - beginner
+  - advanced
+  - guide
+  - checklist
+  - template
+  - why
+  - when
+  - where
+  - which
+
+# NLP settings
+nlp:
+  ngram_min_df: 2
+  ngram_range:
+    - 2
+    - 3
+  top_terms_per_doc: 10
+
+# Scraping settings
+scrape:
+  timeout: 10
+  retries: 2
+  user_agent: "keyword-lab/1.0"
+  max_serp_results: 10
+  cache_enabled: true
+  cache_dir: ".keyword_lab_cache"
+
+# Clustering settings
+cluster:
+  max_clusters: 8
+  max_keywords_per_cluster: 12
+  random_state: 42
+  use_silhouette: true
+  silhouette_k_range:
+    - 4
+    - 15
+
+# LLM settings
+llm:
+  provider: auto  # auto, gemini, openai, anthropic, none
+  max_expansion_results: 50
+  model: null  # null means use provider default
+
+# Output settings
+output:
+  format: json  # json, csv, xlsx
+  pretty_print: true

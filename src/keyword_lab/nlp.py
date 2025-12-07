@@ -54,13 +54,28 @@ QUESTION_PREFIXES = [
     "how", "what", "best", "vs", "for", "near me", "beginner", "advanced", "guide", "checklist", "template", "why"
 ]
 
+# Alias for external access (can be overridden via config)
+DEFAULT_QUESTION_PREFIXES = QUESTION_PREFIXES.copy()
 
-def generate_questions(phrases: Iterable[str], top_n: int = 50) -> List[str]:
+
+def generate_questions(phrases: Iterable[str], top_n: int = 50, prefixes: Optional[List[str]] = None) -> List[str]:
+    """
+    Generate question-style keywords from phrases.
+    
+    Args:
+        phrases: Source phrases to expand
+        top_n: Maximum number of phrases to process
+        prefixes: Optional custom prefixes (from config), defaults to QUESTION_PREFIXES
+        
+    Returns:
+        List of generated question keywords
+    """
+    question_prefixes = prefixes if prefixes is not None else QUESTION_PREFIXES
     qs = []
     for p in list(phrases)[:top_n]:
         if len(p.split()) < 2:
             continue
-        for pref in QUESTION_PREFIXES:
+        for pref in question_prefixes:
             q = f"{pref} {p}".strip()
             if len(q.split()) >= 2:
                 qs.append(q)
@@ -116,12 +131,29 @@ def seed_expansions(seed: str, audience: Optional[str] = None) -> List[str]:
     return list(dict.fromkeys(cands))
 
 
-def generate_candidates(docs: List[Dict], ngram_min_df: int = 2, top_terms_per_doc: int = 10) -> List[str]:
+def generate_candidates(
+    docs: List[Dict], 
+    ngram_min_df: int = 2, 
+    top_terms_per_doc: int = 10,
+    question_prefixes: Optional[List[str]] = None,
+) -> List[str]:
+    """
+    Generate keyword candidates from documents.
+    
+    Args:
+        docs: List of document dicts with 'text' field
+        ngram_min_df: Minimum document frequency for ngrams
+        top_terms_per_doc: Number of top TF-IDF terms per document
+        question_prefixes: Optional custom question prefixes (from config)
+        
+    Returns:
+        List of candidate keywords
+    """
     cleaned_docs = [clean_text(d.get("text", "")) for d in docs]
     cleaned_docs = [t for t in cleaned_docs if t]
     counts_df = ngram_counts(cleaned_docs, min_df=ngram_min_df)
     ngram_list = counts_df["ngram"].tolist()
-    questions = generate_questions(ngram_list, top_n=min(50, len(ngram_list)))
+    questions = generate_questions(ngram_list, top_n=min(50, len(ngram_list)), prefixes=question_prefixes)
     tfidf_terms = tfidf_top_terms_per_doc(cleaned_docs, top_k=top_terms_per_doc)
     cands = list(dict.fromkeys([*ngram_list, *questions, *tfidf_terms]))
     cands = [c.strip().lower() for c in cands if len(c.split()) >= 2]

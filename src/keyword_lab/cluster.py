@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 
 import numpy as np
 from sklearn.cluster import KMeans
@@ -15,8 +15,8 @@ except ImportError:
         "Falling back to TF-IDF vectorization."
     )
 
-
-INTENT_RULES = {
+# Default intent rules (can be overridden via config)
+DEFAULT_INTENT_RULES = {
     "informational": ["who", "what", "why", "how", "guide", "tutorial", "tips", "checklist", "template"],
     "commercial": ["best", "top", "review", "compare", "vs", "alternatives", "pricing"],
     "transactional": ["buy", "discount", "coupon", "deal", "near me"],
@@ -24,10 +24,26 @@ INTENT_RULES = {
 }
 
 
-def infer_intent(keyword: str, competitors: List[str]) -> str:
+def infer_intent(
+    keyword: str, 
+    competitors: List[str], 
+    intent_rules: Optional[Dict[str, List[str]]] = None
+) -> str:
+    """
+    Infer search intent for a keyword.
+    
+    Args:
+        keyword: The keyword to classify
+        competitors: List of competitor domains
+        intent_rules: Optional custom intent rules dict (from config)
+        
+    Returns:
+        Intent string: informational, commercial, transactional, or navigational
+    """
+    rules = intent_rules or DEFAULT_INTENT_RULES
     k = keyword.lower()
     tokens = set(k.split())
-    for intent, words in INTENT_RULES.items():
+    for intent, words in rules.items():
         for w in words:
             if " " in w:
                 if w in k:
