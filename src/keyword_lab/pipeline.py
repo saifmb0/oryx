@@ -11,7 +11,7 @@ from .nlp import generate_candidates, clean_text, DEFAULT_QUESTION_PREFIXES, see
 from .cluster import cluster_keywords, infer_intent
 from .metrics import compute_metrics, opportunity_scores
 from .schema import validate_items
-from .io import write_json, write_csv
+from .io import write_output
 from .llm import expand_with_llm
 from .config import load_config, get_intent_rules, get_question_prefixes
 
@@ -98,9 +98,7 @@ def run_pipeline(
     # Early exit if no candidates
     if not candidates:
         if output:
-            write_json([], output)
-        if save_csv:
-            write_csv([], save_csv)
+            write_output([], output, save_csv)
         return []
 
     # Detect question-style keywords for volume boost
@@ -167,10 +165,8 @@ def run_pipeline(
     # Validate
     validate_items(items)
 
-    # Persist outputs
+    # Persist outputs (supports .json, .csv, .xlsx based on extension)
     if output:
-        write_json(items, output)
-    if save_csv:
-        write_csv(items, save_csv)
+        write_output(items, output, save_csv)
 
     return items
