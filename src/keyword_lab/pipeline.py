@@ -121,8 +121,14 @@ def run_pipeline(
     except Exception:
         freq = {kw: 1 for kw in candidates}
 
-    # Cluster
-    clusters = cluster_keywords(candidates, max_clusters=max_clusters)
+    # Cluster with optional silhouette-based K selection
+    cluster_cfg = (config or {}).get("cluster", {})
+    clusters = cluster_keywords(
+        candidates, 
+        max_clusters=max_clusters,
+        use_silhouette=bool(cluster_cfg.get("use_silhouette", False)),
+        silhouette_k_range=tuple(cluster_cfg.get("silhouette_k_range", [4, 15])),
+    )
 
     # Intent mapping using configurable rules
     competitor_list = [c.strip() for c in (competitors or []) if c.strip()]

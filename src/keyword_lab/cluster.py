@@ -73,6 +73,7 @@ def vectorize_keywords(keywords: List[str]):
 
 
 def choose_k(n_keywords: int, max_clusters: int) -> int:
+    """Simple heuristic for choosing K when silhouette is disabled."""
     if n_keywords < 12:
         return max(1, min(4, n_keywords))
     k = min(max_clusters, n_keywords // 10 + 1)
@@ -80,7 +81,83 @@ def choose_k(n_keywords: int, max_clusters: int) -> int:
     return k
 
 
-def cluster_keywords(keywords: List[str], max_clusters: int = 8, random_state: int = 42):
+def choose_k_silhouette(
+    X: np.ndarray, 
+    k_min: int = 4, 
+    k_max: int = 15, 
+    random_state: int = 42
+) -> int:
+    """
+    Choose optimal K using Silhouette Score.
+    
+    Runs KMeans for each K in range and picks the one with highest silhouette score.
+    
+    Args:
+        X: Feature matrix (n_samples, n_features)
+        k_min: Minimum number of clusters to try
+        k_max: Maximum number of clusters to try
+        random_state: Random seed for reproducibility
+        
+    Returns:
+        Optimal number of clusters
+    """
+    from sklearn.metrics import silhouette_score
+    
+    n_samples = X.shape[0]
+    
+    # Adjust range based on sample size
+    k_min = max(2, k_min)  # Need at least 2 clusters for silhouette
+    k_max = min(k_max, n_samples - 1)  # Can't have more clusters than samples
+    
+    if k_max <= k_min:
+        return k_min
+    
+    best_k = k_min
+    best_score = -1
+    
+    for k in range(k_min, k_max + 1):
+        try:
+            km = KMeans(n_clusters=k, random_state=random_state, n_init=10)
+            labels = km.fit_predict(X)
+            
+            # Silhouette requires at least 2 clusters with samples
+            if len(set(labels)) < 2:
+                continue
+                
+            score = silhouette_score(X, labels)
+            logging.debug(f"Silhouette score for K={k}: {score:.4f}")
+            
+            if score > best_score:
+                best_score = score
+                best_k = k
+        except Exception as e:
+            logging.debug(f"Silhouette failed for K={k}: {e}")
+            continue
+    
+    logging.debug(f"Optimal K={best_k} with silhouette score={best_score:.4f}")
+    return best_k
+
+
+def cluster_keywords(
+    keywords: List[str], 
+    max_clusters: int = 8, 
+    random_state: int = 42,
+    use_silhouette: bool = False,
+    silhouette_k_range: Tuple[int, int] = (4, 15),
+):
+    """
+    Cluster keywords into semantic groups.
+    
+    Args:
+        keywords: List of keywords to cluster
+        max_clusters: Maximum number of clusters (used if silhouette disabled)
+        random_state: Random seed for reproducibility
+        use_silhouette: If True, use silhouette score to find optimal K
+        silhouette_k_range: (min_k, max_k) range for silhouette search
+        
+    Returns:
+        Dict mapping cluster names to lists of keywords
+    """
     if not keywords:
         return {}
     X = vectorize_keywords(keywords)
@@ -91,7 +168,18 @@ def cluster_keywords(keywords: List[str], max_clusters: int = 8, random_state: i
             group = kw.split()[0]
             clusters.setdefault(group, []).append(kw)
         return clusters
-    k = choose_k(len(keywords), max_clusters)
+    
+    # Choose K using silhouette score or heuristic
+    if use_silhouette and X.shape[0] >= silhouette_k_range[0]:
+        k = choose_k_silhouette(
+            X, 
+            k_min=silhouette_k_range[0], 
+            k_max=min(silhouette_k_range[1], max_clusters),
+            random_state=random_state,
+        )
+    else:
+        k = choose_k(len(keywords), max_clusters)
+    
     km = KMeans(n_clusters=k, random_state=random_state, n_init=10)
     labels = km.fit_predict(X)
     clusters = {}
