@@ -2,8 +2,8 @@ import json
 import os
 from pathlib import Path
 
-from keyword_lab.pipeline import run_pipeline
-from keyword_lab.schema import validate_items
+from oryx.pipeline import run_pipeline
+from oryx.schema import validate_items
 
 
 def test_pipeline_smoke(tmp_path):

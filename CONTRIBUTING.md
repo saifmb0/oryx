@@ -46,7 +46,7 @@ This ensures code quality checks run automatically before each commit.
 pytest
 
 # Run with coverage
-pytest --cov=src/keyword_lab --cov-report=html
+pytest --cov=src/oryx --cov-report=html
 
 # Run a specific test file
 pytest tests/test_schema.py -v
@@ -70,14 +70,14 @@ ruff format .
 ### Type Checking
 
 ```bash
-mypy src/keyword_lab
+mypy src/oryx
 ```
 
 ## Project Structure
 
 ```
-keyword-lab/
-├── src/keyword_lab/      # Main package source
+oryx/
+├── src/oryx/      # Main package source
 │   ├── cli.py            # Command-line interface
 │   ├── pipeline.py       # Main orchestration
 │   ├── nlp.py            # Text preprocessing
@@ -158,7 +158,7 @@ Then open a pull request on GitHub.
 
 ### Adding a New Export Format
 
-1. Add the writer function in `src/keyword_lab/io.py`:
+1. Add the writer function in `src/oryx/io.py`:
 
 ```python
 def write_newformat(df: pd.DataFrame, path: str) -> None:
@@ -173,11 +173,11 @@ def write_newformat(df: pd.DataFrame, path: str) -> None:
 
 1. The project uses LiteLLM which supports 100+ providers
 2. Users can configure via `llm.model` in their config
-3. For direct integration, add to `src/keyword_lab/llm.py`
+3. For direct integration, add to `src/oryx/llm.py`
 
 ### Adding New Metrics
 
-1. Add the metric function in `src/keyword_lab/metrics.py`
+1. Add the metric function in `src/oryx/metrics.py`
 2. Integrate into `pipeline.py`
 3. Update schema if new fields are needed
 

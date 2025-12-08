@@ -2,7 +2,7 @@
 
 import pytest
 
-from keyword_lab.io import generate_seo_metadata, _suggest_schema_type
+from oryx.io import generate_seo_metadata, _suggest_schema_type
 
 
 class TestMetadataGeneration:

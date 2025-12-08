@@ -1,7 +1,7 @@
-"""Keyword Lab - SEO keyword discovery and clustering CLI."""
+"""ORYX - SEO keyword discovery and clustering CLI."""
 
 # Import typed config classes for convenience
-from keyword_lab.config import (
+from oryx.config import (
     KeywordLabConfig,
     IntentRulesConfig,
     NlpConfig,

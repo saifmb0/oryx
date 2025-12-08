@@ -2,7 +2,7 @@
 
 import pytest
 
-from keyword_lab.nlp import (
+from oryx.nlp import (
     contains_negative_sentiment,
     NEGATIVE_SENTIMENT_TERMS,
 )

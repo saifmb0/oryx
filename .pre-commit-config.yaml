@@ -35,5 +35,5 @@ repos:
           - types-requests
           - types-PyYAML
           - pandas-stubs
-        files: ^src/keyword_lab/
+        files: ^src/oryx/
         pass_filenames: false

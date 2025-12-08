@@ -67,8 +67,7 @@ dev = [
 ]
 
 [project.scripts]
-oryx = "keyword_lab.cli:app"
-keyword-lab = "keyword_lab.cli:app"
+oryx = "oryx.cli:app"
 
 [project.urls]
 Homepage = "https://github.com/your-org/oryx-keyword-lab"

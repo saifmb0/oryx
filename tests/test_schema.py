@@ -1,4 +1,4 @@
-from keyword_lab.schema import COMPACT_SCHEMA, validate_items
+from oryx.schema import COMPACT_SCHEMA, validate_items
 
 def test_schema_validation():
     sample = [

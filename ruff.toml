@@ -28,7 +28,7 @@ ignore = [
 "tests/**/*.py" = ["S101", "F401"]
 
 [lint.isort]
-known-first-party = ["keyword_lab"]
+known-first-party = ["oryx"]
 
 [format]
 # Use double quotes

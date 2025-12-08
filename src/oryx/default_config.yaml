@@ -72,7 +72,7 @@ scrape:
   user_agent: "keyword-lab/1.0"
   max_serp_results: 10
   cache_enabled: true
-  cache_dir: ".keyword_lab_cache"
+  cache_dir: ".oryx_cache"
 
 # Clustering settings
 cluster:

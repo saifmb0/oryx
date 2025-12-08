@@ -1,0 +1,189 @@
+Metadata-Version: 2.4
+Name: oryx-keyword-lab
+Version: 4.0.0
+Summary: UAE-native Keyword Intelligence Engine for Abu Dhabi contracting sector
+Author: ORYX Contributors
+License: AGPL-3.0.-or-later
+Project-URL: Homepage, https://github.com/your-org/oryx-keyword-lab
+Project-URL: Repository, https://github.com/your-org/oryx-keyword-lab
+Project-URL: Documentation, https://github.com/your-org/oryx-keyword-lab#readme
+Keywords: seo,keywords,clustering,nlp,cli,uae,abu-dhabi,arabic,geo,contracting
+Classifier: Development Status :: 4 - Beta
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Topic :: Internet :: WWW/HTTP :: Indexing/Search
+Classifier: Natural Language :: Arabic
+Classifier: Natural Language :: English
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: LICENSE
+Requires-Dist: requests<3.0.0,>=2.32.0
+Requires-Dist: beautifulsoup4<5.0.0,>=4.12.0
+Requires-Dist: pandas<3.0.0,>=2.0.0
+Requires-Dist: numpy<3.0.0,>=1.24.0
+Requires-Dist: scikit-learn<2.0.0,>=1.3.0
+Requires-Dist: typer<1.0.0,>=0.9.0
+Requires-Dist: rich<14.0.0,>=13.0.0
+Requires-Dist: python-dotenv<2.0.0,>=1.0.0
+Requires-Dist: pyyaml<7.0.0,>=6.0
+Requires-Dist: pydantic<3.0.0,>=2.0.0
+Requires-Dist: tenacity<9.0.0,>=8.2.0
+Requires-Dist: typing_extensions>=4.0.0
+Provides-Extra: ml
+Requires-Dist: sentence-transformers<3.0.0,>=2.2.0; extra == "ml"
+Provides-Extra: llm
+Requires-Dist: google-generativeai<1.0.0,>=0.8.0; extra == "llm"
+Requires-Dist: litellm<2.0.0,>=1.0.0; extra == "llm"
+Provides-Extra: excel
+Requires-Dist: openpyxl<4.0.0,>=3.1.0; extra == "excel"
+Provides-Extra: cache
+Requires-Dist: joblib<2.0.0,>=1.3.0; extra == "cache"
+Provides-Extra: scrape
+Requires-Dist: markdownify<1.0.0,>=0.11.0; extra == "scrape"
+Provides-Extra: bilingual
+Requires-Dist: camel-tools<2.0.0,>=1.5.0; extra == "bilingual"
+Provides-Extra: all
+Requires-Dist: sentence-transformers<3.0.0,>=2.2.0; extra == "all"
+Requires-Dist: google-generativeai<1.0.0,>=0.8.0; extra == "all"
+Requires-Dist: litellm<2.0.0,>=1.0.0; extra == "all"
+Requires-Dist: openpyxl<4.0.0,>=3.1.0; extra == "all"
+Requires-Dist: joblib<2.0.0,>=1.3.0; extra == "all"
+Requires-Dist: markdownify<1.0.0,>=0.11.0; extra == "all"
+Requires-Dist: camel-tools<2.0.0,>=1.5.0; extra == "all"
+Provides-Extra: dev
+Requires-Dist: pytest<9.0.0,>=7.0.0; extra == "dev"
+Requires-Dist: pytest-cov<6.0.0,>=4.0.0; extra == "dev"
+Requires-Dist: pre-commit<4.0.0,>=3.0.0; extra == "dev"
+Requires-Dist: ruff>=0.1.0; extra == "dev"
+Requires-Dist: mypy<2.0.0,>=1.0.0; extra == "dev"
+Requires-Dist: types-requests; extra == "dev"
+Requires-Dist: types-PyYAML; extra == "dev"
+Dynamic: license-file
+
+# ORYX: Market Intelligence Engine
+[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/saifmb0/oryx?style=flat&logo=github&label=Release)](https://github.com/saifmb0/oryx/releases/latest)
+![Tests](https://github.com/saifmb0/oryx/actions/workflows/test.yml/badge.svg)
+![License](https://img.shields.io/badge/license-AGPL_v3-blue)
+![Python](https://img.shields.io/badge/python-3.9%2B-blue)
+![Status](https://img.shields.io/badge/status-production_ready-green)
+
+**ORYX** is an enterprise-grade search intelligence platform optimized for the UAE and Gulf markets. Unlike generic SEO tools, ORYX integrates local geography, bilingual intent (Arabic/English), and the semantic nuances of B2B contracting.
+
+It extends traditional keyword research into **Generative Engine Optimization (GEO)**—optimizing content for citation by AI models such as Gemini, ChatGPT, and Perplexity.
+
+## System Architecture
+
+The ORYX pipeline is divided into two main stages: **Data Processing** (Ingestion & Validation) and **Intelligence Generation** (Scoring & Reporting).
+
+### Stage 1: Data Processing Pipeline
+
+This stage focuses on acquiring raw data and stripping away navigation noise and "Franken-keywords."
+
+```mermaid
+graph LR
+    %% 1. Ingestion Phase
+    subgraph Ingestion [1. Data Acquisition]
+        A[Seed] --> B(Resilient Scraper)
+        B -->|Block Filter| C[Clean HTML]
+    end
+
+    %% 2. Validation Phase
+    subgraph Validation [2. Linguistic Checks]
+        C --> D[Sentence Tokenizer]
+        D --> E[POS & Logic Gates]
+    end
+```
+Stage 2: Intelligence & Scoring Engine
+Once data is validated, it enters the scoring engine where it is ranked for naturalness, intent, and commercial value.
+```mermaid
+graph LR
+    %% 3. Intelligence Phase
+    subgraph Intelligence [3. Scoring Engine]
+        F[Perplexity Score] --> G[Universal Penalty]
+        G --> H[Hallucination Audit]
+    end
+
+    %% 4. Reporting Phase
+    subgraph Reporting [4. Output]
+        H --> I[Clustering]
+        I --> J[Opportunity Score]
+        J --> K[Excel / JSON]
+    end
+```
+Key Features
+1. Deep Localization
+ORYX utilizes a custom Named Entity Recognition (NER) system populated with over 200 UAE-specific entities.
+
+Districts: Mussafah, ICAD, KIZAD, Mohammed Bin Zayed City.
+
+Regulatory Bodies: TAMM, Estidama, DED, Tawtheeq.
+
+Legal Frameworks: Musataha, Freehold, Leasehold.
+
+2. High-Precision Anti-Hallucination
+To ensure data integrity, the system employs a multi-layer verification process (v3.2.0):
+
+Sentence Boundary Detection: Uses NLTK to prevent navigation menus and footers from merging into incoherent phrases.
+
+Semantic Logic Gates: Enforces business logic (e.g., preventing "buy" intent for service-based entities like contractors).
+
+Perplexity Scoring: Uses sentence-transformers to reject unnatural or machine-generated phrasing by measuring semantic distance from natural query patterns.
+
+3. Generative Engine Optimization (GEO)
+The system analyzes content for "Information Gain" and "Trust Signals" (E-E-A-T), prioritizing keywords and topics likely to be cited by Large Language Models.
+
+Installation
+Prerequisites
+Python 3.9 or higher
+
+Virtual Environment (recommended)
+
+Setup
+```Bash
+
+git clone [https://github.com/saifmb0/oryx-engine.git](https://github.com/saifmb0/oryx-engine.git)
+cd oryx-engine
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[all]"
+```
+Usage
+Basic Execution
+Run the pipeline with the default configuration.
+
+```Bash
+oryx run --seed-topic "turnkey villa construction" --geo ae
+```
+
+Market-Specific Presets
+Load specialized configurations for specific verticals. The following example targets the Abu Dhabi contracting sector:
+```Bash
+
+oryx run \
+  --seed-topic "commercial fit out" \
+  --preset presets/contracting_ae.yaml \
+  --geo ae \
+  --output "strategy_report.xlsx"
+```
+Configuration
+ORYX is highly configurable via config.yaml or preset files. Key configuration sections include:
+
+Scrape: Controls timeout, retries, and proxy rotation settings.
+
+NLP: Defines n-gram ranges and document frequency thresholds.
+
+Cluster: Adjusts the sensitivity of the semantic clustering algorithm.
+
+GEO: Sets target region, primary emirate, and bilingual processing modes.
+
+Contributing
+Please read CONTRIBUTING.md for details on our code of conduct and the process for submitting pull requests.
+
+License
+This project is licensed under the GNU Affero General Public License v3.0. See the LICENSE file for details.

@@ -4,8 +4,9 @@ Tests for UAE/Gulf market specialization features.
 Tests commercial scoring, SERP CTR adjustment, and niche-specific logic.
 """
 import pytest
+import numpy as np
 
-from keyword_lab.metrics import (
+from oryx.metrics import (
     commercial_value,
     ctr_potential,
     estimate_serp_features,
@@ -244,7 +245,7 @@ class TestUAESpecificLogic:
     
     def test_serp_triggers_include_dubai(self):
         """SERP feature triggers should include UAE locations."""
-        from keyword_lab.metrics import SERP_FEATURE_TRIGGERS
+        from oryx.metrics import SERP_FEATURE_TRIGGERS
         local_triggers = SERP_FEATURE_TRIGGERS.get("local_pack", [])
         assert "in dubai" in local_triggers, "Dubai should trigger local pack"
         assert "in abu dhabi" in local_triggers, "Abu Dhabi should trigger local pack"

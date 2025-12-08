@@ -2,7 +2,7 @@
 
 import pytest
 
-from keyword_lab.llm import (
+from oryx.llm import (
     verify_candidates_with_llm,
     filter_llm_verified,
     classify_intents_with_llm,

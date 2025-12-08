@@ -53,4 +53,4 @@ jobs:
 
       - name: Run type checker
         run: |
-          mypy src/keyword_lab --ignore-missing-imports --no-error-summary || true
+          mypy src/oryx --ignore-missing-imports --no-error-summary || true

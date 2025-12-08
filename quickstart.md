@@ -18,11 +18,11 @@ This guide contains the technical details you need to install, configure, and ru
 ## 2) Run
 
 - Save JSON to file and also print formatted to stdout:
-  - python -m keyword_lab.cli run --seed-topic "best coffee beans" --audience "home baristas" --output keywords.json
+  - python -m oryx run --seed-topic "best coffee beans" --audience "home baristas" --output keywords.json
 - Print to stdout only (formatted):
-  - python -m keyword_lab.cli run --seed-topic "best coffee beans" --audience "home baristas" --output "-"
+  - python -m oryx run --seed-topic "best coffee beans" --audience "home baristas" --output "-"
 - Use local sources (folder of .txt/.md):
-  - python -m keyword_lab.cli run --seed-topic "espresso" --audience "home baristas" --sources tests/data --output keywords.json
+  - python -m oryx run --seed-topic "espresso" --audience "home baristas" --sources tests/data --output keywords.json
 
 ## 3) Configuration
 

@@ -2,7 +2,7 @@
 
 import pytest
 
-from keyword_lab.analysis import (
+from oryx.analysis import (
     identify_competitor_gaps,
     calculate_gap_score,
     prioritize_quick_wins,

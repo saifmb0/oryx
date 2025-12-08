@@ -21,7 +21,7 @@ err_console = Console(stderr=True)
 app = typer.Typer(
     add_completion=False, 
     no_args_is_help=False,  # Changed for interactive mode
-    help="🔬 Keyword Lab - Discover and cluster SEO keywords"
+    help="🦌 ORYX - Discover and cluster SEO keywords"
 )
 
 
