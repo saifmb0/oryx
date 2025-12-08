@@ -92,8 +92,9 @@ Run the pipeline with the default configuration.
 
 oryx run --seed-topic "turnkey villa construction" --geo ae
 Market-Specific Presets
-Load specialized configurations for specific verticals. The following example targets the Abu Dhabi contracting sector:
 ```
+
+Load specialized configurations for specific verticals. The following example targets the Abu Dhabi contracting sector:
 ```Bash
 
 oryx run \
