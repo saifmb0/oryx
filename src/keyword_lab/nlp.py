@@ -517,17 +517,151 @@ SERVICE_TERMS = frozenset({
     "service", "services", "agency", "agencies",
     "firm", "firms", "consultant", "consultants",
     "provider", "providers", "specialist", "specialists",
+    "builder", "builders", "construction", "contracting",
+    "renovation", "maintenance", "repair", "installation",
+})
+
+# Product-oriented terms that work with "buy" prefixes
+PRODUCT_TERMS = frozenset({
+    "equipment", "material", "materials", "tools", "supplies",
+    "machine", "machines", "product", "products", "item", "items",
+    "software", "hardware", "device", "devices",
 })
 
 # Prefixes that imply purchasing a product (not hiring a service)
 BUY_PREFIXES = frozenset({
     "buy", "where to buy", "purchase", "order", "shop for",
+    "cheap", "discount", "for sale", "price of",
+})
+
+# Prefixes that imply hiring a service
+HIRE_PREFIXES = frozenset({
+    "hire", "find", "get quotes", "quotes for", "cost of",
+    "best", "top rated", "recommended",
 })
 
 # Local modifiers that shouldn't be duplicated
 LOCAL_MODIFIERS = frozenset({
     "near me", "nearby", "local", "in my area",
 })
+
+
+class SeedType:
+    """Classification of seed topics for semantic logic gates."""
+    SERVICE = "service"
+    PRODUCT = "product"
+    UNKNOWN = "unknown"
+
+
+def classify_seed_type(seed: str) -> str:
+    """
+    Classify a seed topic as Service, Product, or Unknown.
+    
+    This determines which keyword templates are appropriate:
+    - SERVICE: Use "hire", "quotes", "cost of". Ban "buy", "cheap".
+    - PRODUCT: Use "buy", "price", "reviews". 
+    - UNKNOWN: Use general templates.
+    
+    Args:
+        seed: The seed topic/keyword
+        
+    Returns:
+        SeedType constant (SERVICE, PRODUCT, or UNKNOWN)
+    """
+    seed_lower = seed.lower()
+    seed_tokens = set(seed_lower.split())
+    
+    # Check for service indicators
+    if seed_tokens & SERVICE_TERMS:
+        return SeedType.SERVICE
+    
+    # Check for product indicators
+    if seed_tokens & PRODUCT_TERMS:
+        return SeedType.PRODUCT
+    
+    # Check for service industry keywords
+    service_keywords = {
+        "contracting", "consulting", "design", "architecture", "engineering",
+        "cleaning", "landscaping", "plumbing", "electrical", "painting",
+        "flooring", "roofing", "hvac", "moving", "legal", "accounting",
+    }
+    if seed_tokens & service_keywords:
+        return SeedType.SERVICE
+    
+    # Check for product keywords
+    product_keywords = {
+        "coffee", "beans", "furniture", "clothes", "electronics",
+        "appliances", "parts", "accessories",
+    }
+    if seed_tokens & product_keywords:
+        return SeedType.PRODUCT
+    
+    return SeedType.UNKNOWN
+
+
+def fix_near_me_position(keyword: str) -> Optional[str]:
+    """
+    Fix 'near me' positioning - must be suffix only.
+    
+    'near me' at start or middle is grammatically wrong and indicates
+    a scraping artifact or template error.
+    
+    Args:
+        keyword: The keyword to check/fix
+        
+    Returns:
+        Fixed keyword (near me moved to end) or None if unfixable
+        
+    Examples:
+        "near me contractors" -> "contractors near me"
+        "contractors near me" -> "contractors near me" (unchanged)
+        "near me near me" -> None (garbage)
+    """
+    keyword_lower = keyword.lower().strip()
+    
+    # Check for multiple "near me" (garbage)
+    if keyword_lower.count("near me") > 1:
+        return None
+    
+    # If "near me" is not present, return as-is
+    if "near me" not in keyword_lower:
+        return keyword
+    
+    # If already at the end, it's fine
+    if keyword_lower.endswith("near me"):
+        return keyword
+    
+    # "near me" is at start or middle - fix it
+    # Remove "near me" and add to end
+    fixed = keyword_lower.replace("near me", "").strip()
+    if not fixed or len(fixed.split()) < 1:
+        return None  # Nothing left after removing "near me"
+    
+    return f"{fixed} near me"
+
+
+def is_near_me_valid(keyword: str) -> bool:
+    """
+    Check if 'near me' usage is valid (suffix only).
+    
+    Args:
+        keyword: The keyword to check
+        
+    Returns:
+        True if valid, False if 'near me' is in wrong position
+    """
+    keyword_lower = keyword.lower().strip()
+    
+    # No "near me" = valid
+    if "near me" not in keyword_lower:
+        return True
+    
+    # Multiple "near me" = invalid
+    if keyword_lower.count("near me") > 1:
+        return False
+    
+    # Must be at the end
+    return keyword_lower.endswith("near me")
 
 
 def generate_questions(phrases: Iterable[str], top_n: int = 50, prefixes: Optional[List[str]] = None) -> List[str]:
@@ -588,9 +722,22 @@ def generate_questions(phrases: Iterable[str], top_n: int = 50, prefixes: Option
             if pref_lower in p_lower:
                 continue
             
-            q = f"{pref} {p}".strip()
+            # =================================================================
+            # RULE 4: Handle "near me" positioning
+            # =================================================================
+            # "near me" must be a SUFFIX, not a prefix
+            # Transform "near me contractors" -> "contractors near me"
+            if pref_lower == "near me":
+                # Add as suffix instead of prefix
+                q = f"{p} near me".strip()
+            else:
+                q = f"{pref} {p}".strip()
+            
             if len(q.split()) >= 2:
                 qs.append(q)
+    
+    # Post-process: filter out any keywords with invalid near-me positioning
+    qs = [q for q in qs if is_near_me_valid(q)]
     
     return qs
 
@@ -613,9 +760,10 @@ def seed_expansions(seed: str, audience: Optional[str] = None) -> List[str]:
     """
     Generate seed-based keyword expansions with semantic logic gates.
     
-    Applies same compatibility rules as generate_questions:
-    - No "buy" patterns for service-oriented seeds
-    - Contextually appropriate expansions only
+    Uses classify_seed_type to determine appropriate templates:
+    - SERVICE seeds: "hire", "quotes", "cost of" (no "buy")
+    - PRODUCT seeds: "buy", "price", "reviews"
+    - UNKNOWN: General templates
     
     Args:
         seed: The seed topic/keyword
@@ -626,11 +774,9 @@ def seed_expansions(seed: str, audience: Optional[str] = None) -> List[str]:
     """
     s = clean_text(seed)
     aud = clean_text(audience or "")
-    s_lower = s.lower()
-    s_tokens = set(s_lower.split())
     
-    # Detect if seed is about services (not products)
-    is_service_seed = bool(s_tokens & SERVICE_TERMS)
+    # Classify the seed type
+    seed_type = classify_seed_type(seed)
     
     # Base patterns that work for all seeds
     patterns = [
@@ -645,24 +791,41 @@ def seed_expansions(seed: str, audience: Optional[str] = None) -> List[str]:
         "{s} vs alternatives",
         "compare {s}",
         "{s} pricing",
-        "{s} near me",
+        "{s} near me",  # "near me" as suffix is correct
         "beginner {s} guide",
         "advanced {s}",
     ]
     
-    # Only add "buy" patterns for product-oriented seeds
-    if not is_service_seed:
-        patterns.extend([
-            "buy {s}",
-            "where to buy {s}",
-        ])
-    else:
-        # For service seeds, add "hire" patterns instead
+    # Add type-specific patterns
+    if seed_type == SeedType.SERVICE:
+        # Service seeds: hire/find patterns, NO buy patterns
         patterns.extend([
             "hire {s}",
             "find {s}",
             "{s} quotes",
             "{s} cost",
+            "{s} companies",
+            "trusted {s}",
+            "reliable {s}",
+            "{s} reviews",
+        ])
+    elif seed_type == SeedType.PRODUCT:
+        # Product seeds: buy/price patterns
+        patterns.extend([
+            "buy {s}",
+            "where to buy {s}",
+            "{s} price",
+            "cheap {s}",
+            "{s} for sale",
+            "{s} reviews",
+            "{s} comparison",
+        ])
+    else:
+        # Unknown: add both but prioritize general patterns
+        patterns.extend([
+            "{s} reviews",
+            "{s} comparison",
+            "find {s}",
         ])
     
     if aud:
@@ -785,4 +948,18 @@ def generate_candidates(
     # Apply SpaCy-based grammar rules to filter nonsensical keywords
     cands = filter_grammatically_invalid(cands)
     
-    return cands
+    # ==========================================================================
+    # Step 7: Near Me Position Fix (Week 3 - Semantic Logic Gates)
+    # ==========================================================================
+    # Fix or reject keywords with "near me" in wrong position
+    fixed_cands = []
+    for c in cands:
+        if is_near_me_valid(c):
+            fixed_cands.append(c)
+        else:
+            # Try to fix the position
+            fixed = fix_near_me_position(c)
+            if fixed:
+                fixed_cands.append(fixed)
+    
+    return list(dict.fromkeys(fixed_cands))
