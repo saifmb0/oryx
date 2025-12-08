@@ -586,6 +586,148 @@ def _auto_fit_columns(sheet) -> None:
 
 
 # =============================================================================
+# SEO Metadata Auto-Generation
+# =============================================================================
+
+def generate_seo_metadata(
+    items: List[Dict],
+    brand_name: str = "HAGCC",
+    location: str = "Abu Dhabi",
+    output_path: Optional[str] = None,
+) -> List[Dict]:
+    """
+    Generate SEO metadata (title tags, meta descriptions) for keyword clusters.
+    
+    Automatically creates optimized meta tags following SEO best practices:
+    - Title: 50-60 characters with primary keyword + brand
+    - Description: 150-160 characters with keyword variations
+    
+    Args:
+        items: List of keyword dicts from pipeline
+        brand_name: Company/brand name for title suffix
+        location: Primary location for local SEO
+        output_path: Optional path to save metadata.json
+        
+    Returns:
+        List of metadata dicts for each unique cluster
+    """
+    # Group keywords by cluster
+    clusters: Dict[str, List[Dict]] = {}
+    for item in items:
+        cluster = item.get("cluster", "general")
+        if cluster not in clusters:
+            clusters[cluster] = []
+        clusters[cluster].append(item)
+    
+    metadata_list = []
+    
+    for cluster_name, kws in clusters.items():
+        # Sort by opportunity score to get best keywords
+        sorted_kws = sorted(kws, key=lambda x: x.get("opportunity_score", 0), reverse=True)
+        
+        if not sorted_kws:
+            continue
+        
+        # Primary keyword (highest opportunity)
+        primary = sorted_kws[0]
+        primary_kw = primary.get("keyword", cluster_name).title()
+        
+        # Secondary keywords for description
+        secondary_kws = [kw.get("keyword", "") for kw in sorted_kws[1:4]]
+        
+        # Get parent topic for context
+        parent_topic = primary.get("parent_topic", cluster_name).title()
+        
+        # Generate title (50-60 chars target)
+        # Pattern: "Best {Primary Keyword} | {Brand} {Location}"
+        title_base = f"Best {primary_kw}"
+        title_suffix = f" | {brand_name} {location}"
+        
+        if len(title_base + title_suffix) <= 60:
+            title = title_base + title_suffix
+        else:
+            # Truncate if too long
+            max_base = 60 - len(title_suffix) - 3
+            title = title_base[:max_base] + "..." + title_suffix
+        
+        # Generate description (150-160 chars target)
+        # Pattern: "Expert {Parent Topic} in {Location}. Services: {kw1}, {kw2}, {kw3}. Contact us today!"
+        desc_intro = f"Expert {parent_topic} services in {location}."
+        
+        if secondary_kws:
+            services = ", ".join([kw.title() for kw in secondary_kws if kw])
+            desc_services = f" We offer: {services}."
+        else:
+            desc_services = ""
+        
+        desc_cta = " Contact us for a free quote!"
+        
+        full_desc = desc_intro + desc_services + desc_cta
+        
+        # Truncate if over 160 chars
+        if len(full_desc) > 160:
+            full_desc = full_desc[:157] + "..."
+        
+        # Intent-based schema type suggestion
+        intent = primary.get("intent", "informational")
+        schema_type = _suggest_schema_type(intent, cluster_name)
+        
+        metadata = {
+            "cluster": cluster_name,
+            "title": title,
+            "description": full_desc,
+            "primary_keyword": primary.get("keyword", ""),
+            "secondary_keywords": secondary_kws,
+            "parent_topic": primary.get("parent_topic", ""),
+            "intent": intent,
+            "suggested_schema": schema_type,
+            "h1_suggestion": f"{parent_topic} - {primary_kw}",
+            "keywords_count": len(sorted_kws),
+            "avg_opportunity": sum(k.get("opportunity_score", 0) for k in sorted_kws) / len(sorted_kws),
+        }
+        
+        metadata_list.append(metadata)
+    
+    # Sort by average opportunity
+    metadata_list = sorted(metadata_list, key=lambda x: x.get("avg_opportunity", 0), reverse=True)
+    
+    # Save to file if path provided
+    if output_path:
+        write_json(metadata_list, output_path)
+        logging.info(f"Generated SEO metadata for {len(metadata_list)} clusters")
+    
+    return metadata_list
+
+
+def _suggest_schema_type(intent: str, cluster_name: str) -> str:
+    """Suggest appropriate schema.org type based on intent and cluster."""
+    intent_lower = intent.lower()
+    cluster_lower = cluster_name.lower()
+    
+    # Service-based clusters
+    if any(term in cluster_lower for term in ["service", "contractor", "company", "repair", "install"]):
+        return "LocalBusiness"
+    
+    # Product-based
+    if any(term in cluster_lower for term in ["product", "equipment", "material", "supply"]):
+        return "Product"
+    
+    # FAQ/How-to content
+    if intent_lower == "informational":
+        return "FAQPage"
+    
+    # Transactional
+    if intent_lower == "transactional":
+        return "Service"
+    
+    # Local
+    if intent_lower == "local":
+        return "LocalBusiness"
+    
+    return "WebPage"
+
+
+# =============================================================================
 # Output Router
 # =============================================================================
 
