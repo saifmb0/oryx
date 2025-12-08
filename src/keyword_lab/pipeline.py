@@ -201,7 +201,18 @@ def run_pipeline(
     scoring_cfg = cfg_dict.get("scoring", {})
     commercial_weight = float(scoring_cfg.get("commercial_weight", 0.25))
     
-    opp = opportunity_scores(metrics, intents, business_goals, niche=niche, commercial_weight=commercial_weight)
+    # Calculate opportunity scores with naturalness and universal term penalty
+    # This activates the perplexity-based quality filtering from metrics.py
+    opp = opportunity_scores(
+        metrics, 
+        intents, 
+        business_goals, 
+        niche=niche, 
+        commercial_weight=commercial_weight,
+        documents=cleaned_texts,         # Pass documents for universal term detection
+        use_naturalness=True,            # Activate perplexity-based naturalness scoring
+        use_universal_penalty=True,      # Penalize boilerplate/navigation terms
+    )
 
     # Assign parent topics for hub-spoke SEO silo architecture
     parent_topic_cfg = cfg_dict.get("parent_topics", {})
