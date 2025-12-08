@@ -261,7 +261,13 @@ def generate_candidates(
     question_prefixes: Optional[List[str]] = None,
 ) -> List[str]:
     """
-    Generate keyword candidates from documents.
+    Generate keyword candidates by processing documents line-by-line.
+    
+    This prevents footer/nav merging artifacts by respecting the newline
+    boundaries that scrape.py inserts between block elements.
+    
+    The key insight: n-grams should NEVER cross line boundaries because
+    scrape.py uses newlines to separate unrelated content blocks.
     
     Args:
         docs: List of document dicts with 'text' field
@@ -272,16 +278,74 @@ def generate_candidates(
     Returns:
         List of candidate keywords (filtered for scraping artifacts)
     """
-    cleaned_docs = [clean_text(d.get("text", "")) for d in docs]
-    cleaned_docs = [t for t in cleaned_docs if t]
-    counts_df = ngram_counts(cleaned_docs, min_df=ngram_min_df)
+    # ==========================================================================
+    # Step 1: Split docs into lines FIRST to preserve boundaries
+    # ==========================================================================
+    # This is the critical fix: by splitting on \n BEFORE cleaning,
+    # we prevent n-grams from crossing the boundary between unrelated
+    # content blocks (e.g., footer links merging with copyright text)
+    
+    all_lines = []
+    for d in docs:
+        raw_text = d.get("text", "")
+        # Split by newline to respect the structure scrape.py created
+        lines = raw_text.split('\n')
+        for line in lines:
+            # Skip short navigation noise (e.g., "Home", "About", "Login")
+            # Require at least 3 words to be a meaningful content line
+            if len(line.split()) < 3:
+                continue
+            cleaned = clean_text(line)
+            if cleaned and len(cleaned.split()) >= 2:
+                all_lines.append(cleaned)
+    
+    # ==========================================================================
+    # Step 2: Pass lines (not whole docs) to vectorizer
+    # ==========================================================================
+    # CountVectorizer now sees each line as a separate "document"
+    # This prevents n-grams like "owners developers facility" from forming
+    # when those words came from different footer sections
+    
+    counts_df = ngram_counts(all_lines, min_df=ngram_min_df)
     ngram_list = counts_df["ngram"].tolist()
-    questions = generate_questions(ngram_list, top_n=min(50, len(ngram_list)), prefixes=question_prefixes)
-    tfidf_terms = tfidf_top_terms_per_doc(cleaned_docs, top_k=top_terms_per_doc)
+    
+    # ==========================================================================
+    # Step 3: Smart Question Generation
+    # ==========================================================================
+    # Filter artifacts BEFORE generating questions to prevent
+    # "where to buy en ae" type nonsense
+    
+    questions = []
+    if ngram_list:
+        clean_ngrams = filter_scraping_artifacts(ngram_list)
+        questions = generate_questions(
+            clean_ngrams, 
+            top_n=min(50, len(clean_ngrams)), 
+            prefixes=question_prefixes
+        )
+    
+    # ==========================================================================
+    # Step 4: TF-IDF on reconstructed docs
+    # ==========================================================================
+    # Reassemble cleaned lines per doc for TF-IDF context
+    # This preserves document-level importance while respecting line boundaries
+    
+    reconstructed_docs = []
+    for d in docs:
+        raw_lines = d.get("text", "").split('\n')
+        clean_lines = [clean_text(l) for l in raw_lines if len(l.split()) >= 3]
+        if clean_lines:
+            reconstructed_docs.append(" ".join(clean_lines))
+    
+    tfidf_terms = tfidf_top_terms_per_doc(reconstructed_docs, top_k=top_terms_per_doc)
+    
+    # ==========================================================================
+    # Step 5: Combine and filter
+    # ==========================================================================
     cands = list(dict.fromkeys([*ngram_list, *questions, *tfidf_terms]))
     cands = [c.strip().lower() for c in cands if len(c.split()) >= 2]
     
-    # ORYX: Filter out scraping artifacts (language toggles, navigation, ISO codes)
+    # Final artifact filter
     cands = filter_scraping_artifacts(cands)
     
     return cands
