@@ -149,6 +149,46 @@ GEO_TOKENS = frozenset({"uae", "dubai", "abu", "dhabi", "sharjah", "ae", "en", "
 # Common stopwords that don't count as meaningful
 COMMON_STOPWORDS = frozenset({"the", "a", "an", "is", "are", "was", "were", "be", "been", "being"})
 
+# =============================================================================
+# Negative Sentiment Shield
+# =============================================================================
+# Terms that indicate negative/harmful content. Keywords containing these
+# should be filtered to prevent ranking for complaints, scams, etc.
+NEGATIVE_SENTIMENT_TERMS = frozenset({
+    "scam", "scams", "scammer", "scammers",
+    "fraud", "fraudulent", "frauds",
+    "complaint", "complaints",
+    "fake", "fakes",
+    "illegal", "illegally",
+    "fine", "fines", "fined",  # Legal penalties
+    "violation", "violations",
+    "lawsuit", "lawsuits", "sued",
+    "scandal", "scandals",
+    "ripoff", "rip-off", "rip off",
+    "warning", "warnings",
+    "avoid", "avoided",
+    "worst", "terrible", "horrible",
+    "failed", "failure", "failures",
+    "bankrupt", "bankruptcy",
+})
+
+
+def contains_negative_sentiment(keyword: str) -> bool:
+    """
+    Check if keyword contains negative sentiment terms.
+    
+    These terms indicate the searcher may be looking for complaints,
+    scams, or negative reviews - not ideal for a business to rank for.
+    
+    Args:
+        keyword: The keyword to check
+        
+    Returns:
+        True if the keyword contains negative terms
+    """
+    words = set(keyword.lower().split())
+    return bool(words & NEGATIVE_SENTIMENT_TERMS)
+
 
 def is_grammatically_valid(keyword: str) -> bool:
     """
@@ -949,7 +989,18 @@ def generate_candidates(
     cands = filter_grammatically_invalid(cands)
     
     # ==========================================================================
-    # Step 7: Near Me Position Fix (Week 3 - Semantic Logic Gates)
+    # Step 7: Negative Sentiment Shield
+    # ==========================================================================
+    # Filter keywords containing terms like "scam", "fraud", "complaint"
+    # to prevent ranking for negative/harmful searches
+    cands_before = len(cands)
+    cands = [c for c in cands if not contains_negative_sentiment(c)]
+    filtered = cands_before - len(cands)
+    if filtered > 0:
+        logging.info(f"Negative sentiment filter: Removed {filtered} keywords")
+    
+    # ==========================================================================
+    # Step 8: Near Me Position Fix (Week 3 - Semantic Logic Gates)
     # ==========================================================================
     # Fix or reject keywords with "near me" in wrong position
     fixed_cands = []
