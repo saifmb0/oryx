@@ -7,7 +7,7 @@ name = "oryx-keyword-lab"
 version = "4.0.0"
 description = "UAE-native Keyword Intelligence Engine for Abu Dhabi contracting sector"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 license = { text = "AGPL-3.0.-or-later" }
 authors = [{ name = "ORYX Contributors" }]
 classifiers = [
@@ -16,10 +16,8 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Internet :: WWW/HTTP :: Indexing/Search",
     "Natural Language :: Arabic",
     "Natural Language :: English",
@@ -83,13 +81,13 @@ pythonpath = ["src"]
 
 [tool.ruff]
 line-length = 120
-target-version = "py39"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "C4"]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_ignores = true
 ignore_missing_imports = true
