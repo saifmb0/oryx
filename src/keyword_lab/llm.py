@@ -463,6 +463,187 @@ def classify_intents_with_llm(
     return all_intents
 
 
+# ============================================================================
+# LLM-Based Hallucination Detection (Week 5 - v3.2.0)
+# ============================================================================
+
+def _build_verification_prompt(keywords: List[str]) -> str:
+    """Build prompt for hallucination detection / semantic verification."""
+    keyword_list = "\n".join(f"- {kw}" for kw in keywords[:30])  # Smaller batch for quality
+    
+    return f"""You are an SEO quality auditor. Evaluate each keyword phrase below.
+
+For each keyword, determine if it is:
+1. VALID - A coherent, meaningful search query that real users would type
+2. INVALID - Gibberish, word salad, grammatically broken, or semantically nonsensical
+
+INVALID examples:
+- "template owners developers facility" (word salad, no coherent meaning)
+- "best best cheap price" (repetitive nonsense)
+- "villa rent dubai near me near me" (broken repetition)
+- "cookies policy terms login" (navigation fragments, not a search query)
+
+VALID examples:
+- "best villa rental dubai" (coherent search intent)
+- "ac repair services near me" (clear local service query)
+- "affordable office space dubai marina" (specific location-based query)
+
+Keywords to evaluate:
+{keyword_list}
+
+Return ONLY a JSON object mapping each keyword to either "valid" or "invalid".
+Example: {{"best villa rental dubai": "valid", "template owners developers": "invalid"}}
+No additional text or explanation."""
+
+
+def _parse_verification_response(text: str, keywords: List[str]) -> Dict[str, bool]:
+    """Parse LLM verification response into validity mapping."""
+    import json
+    
+    try:
+        # Extract JSON from response
+        start = text.find("{")
+        end = text.rfind("}") + 1
+        if start >= 0 and end > start:
+            json_str = text[start:end]
+            result = json.loads(json_str)
+            
+            validity = {}
+            for kw in keywords:
+                verdict = result.get(kw, result.get(kw.lower(), "valid"))
+                if isinstance(verdict, str):
+                    verdict = verdict.lower().strip()
+                    validity[kw] = verdict in ("valid", "true", "yes", "1")
+                elif isinstance(verdict, bool):
+                    validity[kw] = verdict
+                else:
+                    validity[kw] = True  # Default to valid if unclear
+            return validity
+    except (json.JSONDecodeError, Exception) as e:
+        logging.debug(f"Failed to parse verification response: {e}")
+    
+    # Fallback: assume all valid (conservative)
+    return {kw: True for kw in keywords}
+
+
+def verify_candidates_with_llm(
+    keywords: List[str],
+    provider: str = "auto",
+    model: Optional[str] = None,
+    batch_size: int = 30,
+) -> Dict[str, bool]:
+    """
+    Verify keyword candidates using LLM to detect hallucinations and semantic nonsense.
+    
+    This function acts as a final quality gate to catch "Franken-keywords" that
+    passed earlier heuristic filters but are still semantically broken.
+    
+    Args:
+        keywords: List of keyword candidates to verify
+        provider: LLM provider ('auto', 'gemini', 'openai', 'anthropic')
+        model: Optional specific model name
+        batch_size: Max keywords per LLM call (smaller = better quality)
+        
+    Returns:
+        Dict mapping keyword -> is_valid (True = passes, False = hallucination)
+    """
+    if not keywords:
+        return {}
+    
+    if provider == "none":
+        # No LLM available, assume all valid
+        return {kw: True for kw in keywords}
+    
+    # Auto-detect provider
+    if provider == "auto":
+        provider = _detect_provider()
+        if provider is None:
+            logging.debug("No LLM available for hallucination verification")
+            return {kw: True for kw in keywords}
+    
+    all_validity: Dict[str, bool] = {}
+    rejected_count = 0
+    
+    # Process in batches
+    for i in range(0, len(keywords), batch_size):
+        batch = keywords[i:i + batch_size]
+        prompt = _build_verification_prompt(batch)
+        
+        try:
+            text = ""
+            if provider == "gemini" and HAS_GENAI:
+                api_key = os.getenv("GEMINI_API_KEY", "").strip()
+                if api_key:
+                    genai.configure(api_key=api_key)
+                    model_name = model or os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
+                    model_instance = genai.GenerativeModel(model_name)
+                    resp = model_instance.generate_content(prompt)
+                    text = getattr(resp, "text", "") or ""
+            elif HAS_LITELLM:
+                llm_model = model
+                if llm_model is None:
+                    if provider == "openai" or os.getenv("OPENAI_API_KEY"):
+                        llm_model = "gpt-4o-mini"
+                    elif provider == "anthropic" or os.getenv("ANTHROPIC_API_KEY"):
+                        llm_model = "claude-3-haiku-20240307"
+                
+                if llm_model:
+                    response = litellm.completion(
+                        model=llm_model,
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=2000,
+                    )
+                    text = response.choices[0].message.content or ""
+            
+            if text:
+                batch_validity = _parse_verification_response(text, batch)
+                all_validity.update(batch_validity)
+                rejected_count += sum(1 for v in batch_validity.values() if not v)
+            else:
+                # No response, assume valid
+                for kw in batch:
+                    all_validity[kw] = True
+                    
+        except Exception as e:
+            logging.debug(f"LLM verification failed for batch: {e}")
+            # Fallback: assume valid for failed batch
+            for kw in batch:
+                if kw not in all_validity:
+                    all_validity[kw] = True
+    
+    # Fill any missing keywords
+    for kw in keywords:
+        if kw not in all_validity:
+            all_validity[kw] = True
+    
+    if rejected_count > 0:
+        logging.info(f"LLM verification: {rejected_count}/{len(keywords)} keywords flagged as hallucinations")
+    
+    return all_validity
+
+
+def filter_llm_verified(
+    keywords: List[str],
+    provider: str = "auto",
+    model: Optional[str] = None,
+) -> List[str]:
+    """
+    Filter keywords to only those that pass LLM verification.
+    
+    Convenience wrapper around verify_candidates_with_llm().
+    
+    Args:
+        keywords: List of keyword candidates
+        provider: LLM provider
+        model: Optional model name
+        
+    Returns:
+        List of keywords that passed verification
+    """
+    validity = verify_candidates_with_llm(keywords, provider, model)
+    return [kw for kw in keywords if validity.get(kw, True)]
+
+
 def assign_parent_topics(
     keywords: List[str],
     provider: str = "auto",
