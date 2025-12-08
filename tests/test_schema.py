@@ -1,6 +1,4 @@
 from keyword_lab.schema import COMPACT_SCHEMA, validate_items
-# from jsonschema import validate
-
 
 def test_schema_validation():
     sample = [
@@ -19,5 +17,18 @@ def test_schema_validation():
             "opportunity_score": 0.5,
         }
     ]
-    # validate(instance=sample, schema=COMPACT_SCHEMA)
-    assert validate_items(sample) is True
+    
+    # Action: Validate items and capture the result
+    result = validate_items(sample)
+    
+    # Assertion 1: It should return a list (not True)
+    assert isinstance(result, list), "Expected a list of KeywordData objects"
+    
+    # Assertion 2: The list should not be empty
+    assert len(result) == 1
+    
+    # Assertion 3: Verify the data was correctly parsed into the Pydantic model
+    # Note: Pydantic models support dot access
+    assert result[0].keyword == "best coffee beans"
+    assert result[0].opportunity_score == 0.5
+    assert result[0].validated is True
