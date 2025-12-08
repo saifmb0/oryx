@@ -253,6 +253,58 @@ def load_preset(preset_path: str) -> Dict[str, Any]:
         raise ConfigValidationError([f"Failed to parse preset {preset_path}: {e}"])
 
 
+def _normalize_config(config_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Normalize flat preset config values to nested Pydantic structure.
+    
+    Presets use flat values like `geo: "ae"` for user convenience,
+    but Pydantic expects nested structures like `geo: {region: "ae"}`.
+    
+    This function converts:
+    - geo: "ae" -> geo: {region: "ae"}
+    - max_clusters: 12 -> cluster: {max_clusters: 12}
+    - etc.
+    """
+    result = config_dict.copy()
+    
+    # Normalize geo: string -> geo: {region: string}
+    if "geo" in result and isinstance(result["geo"], str):
+        geo_str = result["geo"]
+        result["geo"] = {"region": geo_str}
+    
+    # Normalize flat cluster settings
+    cluster_keys = ["max_clusters", "max_keywords_per_cluster", "random_state", 
+                    "use_silhouette", "silhouette_k_range"]
+    for key in cluster_keys:
+        if key in result and "cluster" not in result:
+            result["cluster"] = {}
+        if key in result:
+            if "cluster" not in result:
+                result["cluster"] = {}
+            result["cluster"][key] = result.pop(key)
+    
+    # Normalize flat llm settings
+    llm_keys = ["provider", "model", "temperature", "max_tokens", "max_expansion_results"]
+    for key in llm_keys:
+        if key in result and key not in ["niche", "preset_name"]:
+            # Only move provider if it looks like an LLM provider value
+            if key == "provider" and result[key] in ["auto", "gemini", "openai", "anthropic", "none"]:
+                if "llm" not in result:
+                    result["llm"] = {}
+                result["llm"][key] = result.pop(key)
+    
+    # Normalize flat scrape settings
+    scrape_keys = ["timeout", "retries", "user_agent", "max_serp_results", 
+                   "proxy_enabled", "proxy_urls", "min_delay_ms", "max_delay_ms"]
+    for key in scrape_keys:
+        if key in result:
+            if "scrape" not in result:
+                result["scrape"] = {}
+            result["scrape"][key] = result.pop(key)
+    
+    return result
+
+
 def load_config(
     config_path: Optional[str] = None, 
     preset_path: Optional[str] = None,
@@ -303,6 +355,9 @@ def load_config(
         except Exception as e:
             logging.warning(f"Failed to read config {user_config_path}: {e}")
     
+    # Normalize flat preset values to nested Pydantic structure
+    config_dict = _normalize_config(config_dict)
+    
     # Validate and create Pydantic model
     try:
         return KeywordLabConfig(**config_dict)
@@ -315,11 +370,51 @@ def load_config(
         raise
 
 
-def get_intent_rules(config: KeywordLabConfig) -> IntentRulesConfig:
-    """Get intent rules from config."""
-    return config.intent_rules
+def get_intent_rules(config) -> Dict[str, List[str]]:
+    """
+    Get intent rules from config as a dictionary.
+    
+    Handles both Pydantic KeywordLabConfig and legacy dict configs.
+    """
+    if config is None:
+        return IntentRulesConfig().model_dump()
+    if isinstance(config, KeywordLabConfig):
+        return config.intent_rules.model_dump()
+    if isinstance(config, dict):
+        rules = config.get("intent_rules", {})
+        if isinstance(rules, IntentRulesConfig):
+            return rules.model_dump()
+        return rules if rules else IntentRulesConfig().model_dump()
+    return IntentRulesConfig().model_dump()
 
 
-def get_question_prefixes(config: KeywordLabConfig) -> List[str]:
-    """Get question prefixes from config."""
-    return config.question_prefixes
+def get_question_prefixes(config) -> List[str]:
+    """
+    Get question prefixes from config.
+    
+    Handles both Pydantic KeywordLabConfig and legacy dict configs.
+    """
+    default_prefixes = ["how", "what", "best", "vs", "for", "near me", "beginner", "advanced", 
+                        "guide", "checklist", "template", "why", "cost", "price", "cheap"]
+    if config is None:
+        return default_prefixes
+    if isinstance(config, KeywordLabConfig):
+        return config.question_prefixes
+    if isinstance(config, dict):
+        return config.get("question_prefixes", default_prefixes)
+    return default_prefixes
+
+
+def config_to_dict(config) -> Dict[str, Any]:
+    """
+    Convert config (Pydantic or dict) to a nested dictionary.
+    
+    This allows the pipeline to use dict-style access for backwards compatibility.
+    """
+    if config is None:
+        return {}
+    if isinstance(config, KeywordLabConfig):
+        return config.model_dump()
+    if isinstance(config, dict):
+        return config
+    return {}

@@ -13,7 +13,7 @@ from .metrics import compute_metrics, opportunity_scores
 from .schema import validate_items
 from .io import write_output
 from .llm import expand_with_llm, assign_parent_topics
-from .config import load_config, get_intent_rules, get_question_prefixes
+from .config import load_config, get_intent_rules, get_question_prefixes, config_to_dict
 
 
 def to_funnel_stage(intent: str) -> str:
@@ -41,7 +41,7 @@ def run_pipeline(
     output: str = "keywords.json",
     save_csv: Optional[str] = None,
     verbose: bool = False,
-    config: Optional[Dict] = None,
+    config = None,
     dry_run: bool = False,
     niche: Optional[str] = None,
 ) -> List[Dict]:
@@ -50,13 +50,16 @@ def run_pipeline(
     if verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
-    # Get config sections
-    nlp_cfg = (config or {}).get("nlp", {})
-    scrape_cfg = (config or {}).get("scrape", {})
+    # Convert config to dict for backwards-compatible access
+    cfg_dict = config_to_dict(config)
     
-    # Get configurable rules
-    intent_rules = get_intent_rules(config or {})
-    question_prefixes = get_question_prefixes(config or {})
+    # Get config sections
+    nlp_cfg = cfg_dict.get("nlp", {})
+    scrape_cfg = cfg_dict.get("scrape", {})
+    
+    # Get configurable rules (handles both Pydantic and dict)
+    intent_rules = get_intent_rules(config)
+    question_prefixes = get_question_prefixes(config)
 
     # Acquire documents (with caching for faster iterations)
     docs = acquire_documents(
@@ -87,7 +90,7 @@ def run_pipeline(
 
     # Seed-based and LLM expansions
     seed_cands = seed_expansions(seed_topic, audience)
-    llm_cfg = (config or {}).get("llm", {})
+    llm_cfg = cfg_dict.get("llm", {})
     llm_cands = expand_with_llm(
         seed_topic, audience, language, geo, 
         max_results=int(llm_cfg.get("max_expansion_results", 50)),
@@ -97,7 +100,7 @@ def run_pipeline(
     candidates = list(dict.fromkeys([*candidates, *seed_cands, *llm_cands]))
 
     # Apply blacklist and length filtering
-    filter_cfg = (config or {}).get("filtering", {})
+    filter_cfg = cfg_dict.get("filtering", {})
     blacklist = [b.lower() for b in filter_cfg.get("blacklist", [])]
     min_words = int(filter_cfg.get("min_words", 2))
     max_words = int(filter_cfg.get("max_words", 6))
@@ -149,7 +152,7 @@ def run_pipeline(
         freq = {kw: 1 for kw in candidates}
 
     # Cluster with optional silhouette-based K selection
-    cluster_cfg = (config or {}).get("cluster", {})
+    cluster_cfg = cfg_dict.get("cluster", {})
     clusters = cluster_keywords(
         candidates, 
         max_clusters=max_clusters,
@@ -162,7 +165,7 @@ def run_pipeline(
     intents = {kw: infer_intent(kw, competitor_list, intent_rules) for kw in candidates}
 
     # Validate keywords with Google Autocomplete (if enabled)
-    validation_cfg = (config or {}).get("validation", {})
+    validation_cfg = cfg_dict.get("validation", {})
     validated_keywords: Dict[str, bool] = {}
     if validation_cfg.get("autocomplete_enabled", True) and not dry_run:
         # Limit to top candidates by frequency to avoid rate limiting
@@ -183,13 +186,13 @@ def run_pipeline(
     )
     
     # Get commercial weight from config if available
-    scoring_cfg = (config or {}).get("scoring", {})
+    scoring_cfg = cfg_dict.get("scoring", {})
     commercial_weight = float(scoring_cfg.get("commercial_weight", 0.25))
     
     opp = opportunity_scores(metrics, intents, business_goals, niche=niche, commercial_weight=commercial_weight)
 
     # Assign parent topics for hub-spoke SEO silo architecture
-    parent_topic_cfg = (config or {}).get("parent_topics", {})
+    parent_topic_cfg = cfg_dict.get("parent_topics", {})
     parent_topics: Dict[str, str] = {}
     if parent_topic_cfg.get("enabled", True) and not dry_run:
         parent_topics = assign_parent_topics(

@@ -12,7 +12,7 @@ from rich.table import Table
 from rich.panel import Panel
 
 from .pipeline import run_pipeline
-from .config import load_config, ConfigValidationError
+from .config import load_config, ConfigValidationError, config_to_dict, KeywordLabConfig
 
 # Initialize rich console
 console = Console()
@@ -125,17 +125,21 @@ def run(
         err_console.print("\n[dim]Check your config.yaml for typos or invalid values.[/dim]")
         sys.exit(2)
 
+    # Convert to dict for easy attribute access (handles both Pydantic and legacy)
+    cfg_dict = config_to_dict(cfg)
+    
     # Override with preset values if present
     if preset and cfg:
-        geo = cfg.get("geo", geo)
-        language = cfg.get("language", language)
-        audience = cfg.get("audience", audience) if audience == typer.prompt("👥 Enter target audience") else audience
-        business_goals = cfg.get("business_goals", business_goals)
-        max_clusters = cfg.get("max_clusters", max_clusters)
-        max_keywords_per_cluster = cfg.get("max_keywords_per_cluster", max_keywords_per_cluster)
+        # Access Pydantic model attributes or dict keys
+        geo = cfg_dict.get("geo", {}).get("region", geo) if isinstance(cfg_dict.get("geo"), dict) else geo
+        language = getattr(cfg, "language", None) or cfg_dict.get("language", language)
+        audience = cfg_dict.get("audience", audience)
+        business_goals = cfg_dict.get("business_goals", business_goals)
+        max_clusters = cfg_dict.get("cluster", {}).get("max_clusters", max_clusters) if isinstance(cfg_dict.get("cluster"), dict) else cfg_dict.get("max_clusters", max_clusters)
+        max_keywords_per_cluster = cfg_dict.get("cluster", {}).get("max_keywords_per_cluster", max_keywords_per_cluster) if isinstance(cfg_dict.get("cluster"), dict) else cfg_dict.get("max_keywords_per_cluster", max_keywords_per_cluster)
         
     # Get niche from preset or CLI
-    effective_niche = niche or cfg.get("niche") if cfg else niche
+    effective_niche = niche or cfg_dict.get("niche") if cfg else niche
 
     comp_list: List[str] = [c.strip() for c in competitors.split(",") if c.strip()]
 
