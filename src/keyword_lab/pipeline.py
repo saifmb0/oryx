@@ -242,7 +242,23 @@ def run_pipeline(
     # Global ranking by opportunity_score (then search_volume desc, then keyword asc)
     items = sorted(items, key=lambda it: (-it["opportunity_score"], -it["search_volume"], it["keyword"]))
 
-    # Validate
+    # ORYX Quality Gate: Filter unvalidated low-opportunity keywords
+    # Keeps validated keywords OR high-opportunity unvalidated ones
+    quality_cfg = cfg_dict.get("quality", {})
+    min_opportunity_unvalidated = float(quality_cfg.get("min_opportunity_unvalidated", 0.5))
+    filter_unvalidated = bool(quality_cfg.get("filter_unvalidated", True))
+    
+    if filter_unvalidated:
+        items_before = len(items)
+        items = [
+            it for it in items 
+            if it["validated"] or it["opportunity_score"] >= min_opportunity_unvalidated
+        ]
+        filtered_count = items_before - len(items)
+        if filtered_count > 0:
+            logging.info(f"Quality gate: Removed {filtered_count} unvalidated low-opportunity keywords (threshold: {min_opportunity_unvalidated})")
+
+    # Validate schema
     validate_items(items)
 
     # Persist outputs (supports .json, .csv, .xlsx based on extension)
