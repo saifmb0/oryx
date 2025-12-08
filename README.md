@@ -27,6 +27,23 @@ A powerful CLI tool that transforms seed topics into validated, ranked SEO keywo
 ### Previous Releases
 
 <details>
+<summary>v3.2.0 - High-Precision Mode (Anti-Hallucination)</summary>
+
+**"Eliminate Semantic Bullshit"** - A 6-week engineering sprint targeting Franken-keywords:
+
+- 🧱 **Block Walker** - DOM traversal targeting `<article>`, `<main>`, content containers
+- 🔗 **Link Density Filter** - Discard navigation blocks (>50% link text)
+- ✂️ **Sentence Boundary Detection** - NLTK sent_tokenize for strict chunking
+- 🔤 **SpaCy Grammar Police** - POS tagging to reject noun-only word salad
+- 🏛️ **Entity Cohesion Check** - Reject conflicting UAE cities in same keyword
+- 🏷️ **Seed Type Classification** - SERVICE, PRODUCT, UNKNOWN taxonomy
+- 📍 **Near-Me Position Fix** - Enforce "near me" as suffix only
+- 📊 **Perplexity Scoring** - Embedding-based naturalness detection
+- 🚫 **Universal Term Penalty** - Penalize "login", "cookie", "privacy policy"
+- 🤖 **LLM Hallucination Audit** - Final verification of semantic coherence
+</details>
+
+<details>
 <summary>v3.0 - UAE/Gulf Market Specialization</summary>
 
 - 🇦🇪 **Arabic/English Bilingual Support** - Unicode text preprocessing, Arabic stopwords

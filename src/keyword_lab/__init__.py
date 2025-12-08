@@ -35,4 +35,4 @@ __all__ = [
     "ConfigValidationError",
 ]
 
-__version__ = "0.1.0"
+__version__ = "4.0.0"
