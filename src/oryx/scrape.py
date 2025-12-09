@@ -1197,6 +1197,56 @@ def _bing_search(query: str, api_key: str, max_results: int = 10) -> List[Dict]:
         return []
 
 
+# Try to import duckduckgo_search for free, no-API-key searching
+try:
+    from duckduckgo_search import DDGS
+    HAS_DUCKDUCKGO = True
+except ImportError:
+    HAS_DUCKDUCKGO = False
+    DDGS = None
+
+
+def _free_search(query: str, max_results: int = 10, region: str = "wt-wt") -> List[Dict]:
+    """
+    Free search using DuckDuckGo (no API key required).
+    
+    This is slower and less reliable than paid APIs, but allows
+    zero-config operation for casual users.
+    
+    Args:
+        query: Search query string
+        max_results: Maximum results to return
+        region: DuckDuckGo region code (wt-wt = worldwide, ae-ar = UAE Arabic)
+        
+    Returns:
+        List of search results with title, url, snippet
+    """
+    if not HAS_DUCKDUCKGO:
+        logging.warning(
+            "duckduckgo_search not installed. Install with: pip install duckduckgo_search"
+        )
+        return []
+    
+    try:
+        with DDGS() as ddgs:
+            raw_results = list(ddgs.text(query, region=region, max_results=max_results))
+        
+        results = []
+        for item in raw_results[:max_results]:
+            results.append({
+                "title": item.get("title", ""),
+                "url": item.get("href", ""),
+                "snippet": item.get("body", ""),
+                "total_results": None,  # DuckDuckGo doesn't provide total count
+            })
+        
+        logging.info(f"DuckDuckGo search returned {len(results)} results for '{query}'")
+        return results
+    except Exception as e:
+        logging.warning(f"DuckDuckGo search failed: {e}")
+        return []
+
+
 def acquire_documents(
     sources: Optional[str],
     query: Optional[str],
