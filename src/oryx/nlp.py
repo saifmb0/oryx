@@ -763,6 +763,10 @@ def ngram_counts(texts: List[str], ngram_range=(2, 3), min_df: int = 2) -> pd.Da
     
     Protects multi-word proper nouns (e.g., "Abu Dhabi") from being split
     during tokenization.
+    
+    IMPORTANT: Does NOT remove stopwords during vectorization to preserve
+    valid phrases like "step by step". Instead, filters out n-grams that
+    START or END with stopwords (e.g., "for the", "company in").
     """
     if not texts:
         return pd.DataFrame(columns=["ngram", "count"])
@@ -772,12 +776,15 @@ def ngram_counts(texts: List[str], ngram_range=(2, 3), min_df: int = 2) -> pd.Da
     
     n_docs = len(protected_texts)
     eff_min_df = min_df if n_docs >= min_df else max(1, n_docs)
+    
+    # Generate n-grams WITHOUT removing stopwords first
+    # This preserves valid phrases like "step by step"
     try:
-        vectorizer = CountVectorizer(ngram_range=ngram_range, min_df=eff_min_df, stop_words="english")
+        vectorizer = CountVectorizer(ngram_range=ngram_range, min_df=eff_min_df, stop_words=None)
         X = vectorizer.fit_transform(protected_texts)
     except ValueError:
         # Fallback for very small corpora
-        vectorizer = CountVectorizer(ngram_range=ngram_range, min_df=1, stop_words="english")
+        vectorizer = CountVectorizer(ngram_range=ngram_range, min_df=1, stop_words=None)
         X = vectorizer.fit_transform(protected_texts)
     counts = np.asarray(X.sum(axis=0)).ravel()
     ngrams = vectorizer.get_feature_names_out()
@@ -786,6 +793,22 @@ def ngram_counts(texts: List[str], ngram_range=(2, 3), min_df: int = 2) -> pd.Da
     restored_ngrams = [restore_proper_nouns(ng) for ng in ngrams]
     
     df = pd.DataFrame({"ngram": restored_ngrams, "count": counts})
+    
+    # Filter out n-grams that start or end with stopwords
+    # This prevents garbage like "for the", "in dubai" (preposition-only)
+    # but keeps valid phrases like "step by step", "villa in dubai"
+    stopwords = get_stopwords("en")
+    
+    def is_valid_ngram(ngram: str) -> bool:
+        words = ngram.lower().split()
+        if not words:
+            return False
+        # Reject if starts or ends with a stopword
+        if words[0] in stopwords or words[-1] in stopwords:
+            return False
+        return True
+    
+    df = df[df["ngram"].apply(is_valid_ngram)]
     df = df.sort_values("count", ascending=False)
     return df
 
@@ -1092,6 +1115,8 @@ def tfidf_top_terms_per_doc(texts: List[str], ngram_range=(2, 3), top_k: int = 1
     Extract top TF-IDF terms per document with proper noun protection.
     
     Protects multi-word proper nouns from being split during tokenization.
+    Does NOT remove stopwords during vectorization to preserve valid phrases.
+    Filters out n-grams that start/end with stopwords afterward.
     """
     if not texts:
         return []
@@ -1099,18 +1124,32 @@ def tfidf_top_terms_per_doc(texts: List[str], ngram_range=(2, 3), top_k: int = 1
     # Protect proper nouns before tokenization
     protected_texts = [protect_proper_nouns(t) for t in texts]
     
-    vec = TfidfVectorizer(ngram_range=ngram_range, stop_words="english")
+    # Don't remove stopwords during vectorization - filter afterward
+    vec = TfidfVectorizer(ngram_range=ngram_range, stop_words=None)
     X = vec.fit_transform(protected_texts)
     terms = vec.get_feature_names_out()
     
     tops: List[str] = []
     for i in range(X.shape[0]):
         row = X.getrow(i).toarray().ravel()
-        idx = np.argsort(-row)[:top_k]
+        idx = np.argsort(-row)[:top_k * 2]  # Get extra to account for filtering
         tops.extend([terms[j] for j in idx if row[j] > 0])
     
     # Restore proper nouns in the output
     tops = [restore_proper_nouns(t) for t in tops]
+    
+    # Filter out n-grams that start/end with stopwords
+    stopwords = get_stopwords("en")
+    
+    def is_valid_ngram(ngram: str) -> bool:
+        words = ngram.lower().split()
+        if not words:
+            return False
+        if words[0] in stopwords or words[-1] in stopwords:
+            return False
+        return True
+    
+    tops = [t for t in tops if is_valid_ngram(t)]
     
     return list(dict.fromkeys(tops))
 
