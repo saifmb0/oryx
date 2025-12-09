@@ -44,6 +44,7 @@ def run_pipeline(
     config = None,
     dry_run: bool = False,
     niche: Optional[str] = None,
+    use_run_dir: bool = False,
 ) -> List[Dict]:
     load_dotenv()
 
@@ -304,6 +305,6 @@ def run_pipeline(
 
     # Persist outputs (supports .json, .csv, .xlsx based on extension)
     if output:
-        write_output(items, output, save_csv)
+        write_output(items, output, save_csv, use_run_dir=use_run_dir)
 
     return items

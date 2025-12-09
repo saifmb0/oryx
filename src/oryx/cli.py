@@ -101,6 +101,7 @@ def run(
     table_output: bool = typer.Option(False, "--table", help="Display results as a table instead of JSON"),
     preset: Optional[str] = typer.Option(None, "--preset", help="Niche preset file (e.g., presets/contracting_ae.yaml)"),
     niche: Optional[str] = typer.Option(None, "--niche", help="Niche for commercial scoring (contracting, real_estate, legal)"),
+    use_run_dir: bool = typer.Option(False, "--run-dir", help="Save outputs in ./data/run_id=YYYYMMDDHHMM/"),
 ):
     """
     Run the keyword discovery pipeline.
@@ -186,6 +187,7 @@ def run(
         config=cfg,
         dry_run=dry_run,
         niche=effective_niche,
+        use_run_dir=use_run_dir,
     )
 
     # Output display

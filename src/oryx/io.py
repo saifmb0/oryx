@@ -814,29 +814,76 @@ def _suggest_schema_type(intent: str, cluster_name: str) -> str:
 # Output Router
 # =============================================================================
 
+def generate_run_id() -> str:
+    """Generate a timestamped run ID in YYYYMMDDHHMM format."""
+    return datetime.now().strftime("%Y%m%d%H%M")
+
+
+def get_run_dir(base_dir: str = "./data", run_id: Optional[str] = None) -> Path:
+    """
+    Get or create a timestamped run directory.
+    
+    Args:
+        base_dir: Base directory for runs (default: ./data)
+        run_id: Optional run ID. If None, generates a new one.
+        
+    Returns:
+        Path to the run directory (e.g., ./data/run_id=202506151430/)
+    """
+    if run_id is None:
+        run_id = generate_run_id()
+    run_dir = Path(base_dir) / f"run_id={run_id}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    return run_dir
+
+
 def write_output(
     items: List[Dict], 
     output_path: str, 
     save_csv: str = None,
     geo: str = "ae",
     report_title: str = "ORYX Keyword Intelligence Report",
-) -> None:
+    use_run_dir: bool = False,
+    run_id: Optional[str] = None,
+) -> Optional[Path]:
     """
     Write output in the appropriate format based on file extension.
+    
+    Args:
+        items: List of keyword dictionaries to write.
+        output_path: Path to output file (or "-" for stdout).
+        save_csv: Optional path for additional CSV export.
+        geo: Geographic region for Excel report.
+        report_title: Title for Excel report.
+        use_run_dir: If True, wrap outputs in ./data/run_id=YYYYMMDDHHMM/
+        run_id: Optional run ID. If None and use_run_dir=True, generates one.
+        
+    Returns:
+        Path to the run directory if use_run_dir=True, otherwise None.
     """
     if output_path == "-":
         write_json(items, output_path)
-        return
+        return None
     
     path = Path(output_path)
     ext = path.suffix.lower()
     
+    # Optionally wrap in timestamped run directory
+    run_dir = None
+    if use_run_dir:
+        run_dir = get_run_dir(run_id=run_id)
+        path = run_dir / path.name
+        logging.info(f"Writing outputs to run directory: {run_dir}")
+    
     if ext == ".xlsx":
-        write_excel(items, output_path, geo=geo, report_title=report_title)
+        write_excel(items, str(path), geo=geo, report_title=report_title)
     elif ext == ".csv":
-        write_csv(items, output_path)
+        write_csv(items, str(path))
     else:
-        write_json(items, output_path)
+        write_json(items, str(path))
     
     if save_csv:
-        write_csv(items, save_csv)
+        csv_path = run_dir / Path(save_csv).name if run_dir else save_csv
+        write_csv(items, str(csv_path))
+    
+    return run_dir
