@@ -1258,6 +1258,7 @@ def acquire_documents(
     dry_run: bool = False,
     use_cache: bool = True,
     cache_dir: str = DEFAULT_CACHE_DIR,
+    geo: str = "wt-wt",
 ) -> List[Document]:
     """
     Acquire documents from various sources.
@@ -1265,7 +1266,12 @@ def acquire_documents(
     Args:
         sources: Path to local sources (file or directory)
         query: Search query for SERP providers
-        provider: SERP provider (none, serpapi, bing)
+        provider: SERP provider (none, auto, serpapi, bing, free)
+            - none: Only use local sources
+            - auto: Try serpapi > bing > free (based on available keys)
+            - serpapi: Use SerpAPI (requires SERPAPI_KEY)
+            - bing: Use Bing API (requires BING_API_KEY)
+            - free: Use DuckDuckGo (no key, but slower/rate-limited)
         max_serp_results: Maximum results from SERP
         timeout: Request timeout
         retries: Number of retries
@@ -1273,6 +1279,7 @@ def acquire_documents(
         dry_run: If True, skip network calls
         use_cache: Enable URL caching (requires joblib)
         cache_dir: Directory for cache storage
+        geo: Region code for free search (default: wt-wt worldwide)
         
     Returns:
         List of Document objects
@@ -1303,18 +1310,41 @@ def acquire_documents(
     # Provider SERP acquisition
     if provider and provider != "none" and query:
         results: List[Dict] = []
-        if provider == "serpapi":
+        
+        # Auto-detect best available provider
+        effective_provider = provider
+        if provider == "auto":
+            serpapi_key = os.getenv("SERPAPI_KEY", "")
+            bing_key = os.getenv("BING_API_KEY", "")
+            if serpapi_key:
+                effective_provider = "serpapi"
+                logging.info("Auto-detected provider: serpapi")
+            elif bing_key:
+                effective_provider = "bing"
+                logging.info("Auto-detected provider: bing")
+            elif HAS_DUCKDUCKGO:
+                effective_provider = "free"
+                logging.info("Auto-detected provider: free (DuckDuckGo)")
+            else:
+                logging.warning("No SERP provider available. Set SERPAPI_KEY or install duckduckgo_search.")
+                effective_provider = "none"
+        
+        # Execute search based on provider
+        if effective_provider == "serpapi":
             key = os.getenv("SERPAPI_KEY", "")
             if key:
                 results = _serpapi_search(query, key, max_results=max_serp_results)
             else:
                 logging.info("SERPAPI_KEY not set; skipping provider fetch")
-        elif provider == "bing":
+        elif effective_provider == "bing":
             key = os.getenv("BING_API_KEY", "")
             if key:
                 results = _bing_search(query, key, max_results=max_serp_results)
             else:
                 logging.info("BING_API_KEY not set; skipping provider fetch")
+        elif effective_provider == "free":
+            results = _free_search(query, max_results=max_serp_results, region=geo)
+        
         # Fetch each result URL (with caching)
         for r in results:
             url = r.get("url")
