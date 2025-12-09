@@ -11,6 +11,95 @@ from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from .stopwords import get_stopwords, EN_STOPWORDS, AR_STOPWORDS
 
 # =============================================================================
+# Protected Proper Nouns (Multi-word entities that should not be split)
+# =============================================================================
+# These multi-word names are treated as single tokens to prevent truncation
+# e.g., "Abu Dhabi" should not become just "abu" or "dhabi"
+
+PROTECTED_PROPER_NOUNS = [
+    # UAE Emirates
+    "abu dhabi",
+    "ras al khaimah",
+    "umm al quwain",
+    # Abu Dhabi areas
+    "al reem island",
+    "yas island",
+    "saadiyat island",
+    "khalifa city",
+    "mohamed bin zayed city",
+    "al ain",
+    "al maryah island",
+    # Dubai areas
+    "palm jumeirah",
+    "dubai marina",
+    "business bay",
+    "downtown dubai",
+    "jumeirah beach residence",
+    "jumeirah lake towers",
+    # Common multi-word terms
+    "near me",
+    "fit out",
+    "turn key",
+    "real estate",
+]
+
+# Pre-compile regex for performance
+_PROPER_NOUN_PATTERN = None
+
+
+def _get_proper_noun_pattern() -> re.Pattern:
+    """Get compiled regex pattern for proper noun protection."""
+    global _PROPER_NOUN_PATTERN
+    if _PROPER_NOUN_PATTERN is None:
+        # Sort by length descending to match longer phrases first
+        sorted_nouns = sorted(PROTECTED_PROPER_NOUNS, key=len, reverse=True)
+        pattern = "|".join(re.escape(noun) for noun in sorted_nouns)
+        _PROPER_NOUN_PATTERN = re.compile(f"({pattern})", re.IGNORECASE)
+    return _PROPER_NOUN_PATTERN
+
+
+def protect_proper_nouns(text: str) -> str:
+    """
+    Protect multi-word proper nouns by replacing spaces with underscores.
+    
+    This prevents tokenizers from splitting "Abu Dhabi" into separate words.
+    
+    Args:
+        text: Input text
+        
+    Returns:
+        Text with proper nouns protected (spaces replaced with underscores)
+    """
+    pattern = _get_proper_noun_pattern()
+    
+    def replace_spaces(match):
+        return match.group(0).replace(" ", "_")
+    
+    return pattern.sub(replace_spaces, text)
+
+
+def restore_proper_nouns(text: str) -> str:
+    """
+    Restore proper nouns by replacing underscores with spaces.
+    
+    Reverses the protection applied by protect_proper_nouns().
+    
+    Args:
+        text: Text with protected proper nouns
+        
+    Returns:
+        Text with underscores restored to spaces in proper nouns
+    """
+    # Only restore underscores that are part of known proper nouns
+    for noun in PROTECTED_PROPER_NOUNS:
+        protected = noun.replace(" ", "_")
+        if protected in text.lower():
+            # Case-insensitive replacement
+            text = re.sub(re.escape(protected), noun, text, flags=re.IGNORECASE)
+    return text
+
+
+# =============================================================================
 # Stemming Deduplicator
 # =============================================================================
 # Uses NLTK's Porter Stemmer to deduplicate near-identical keywords
@@ -669,20 +758,34 @@ def tokenize(text: str, language: str = "en") -> List[str]:
 
 
 def ngram_counts(texts: List[str], ngram_range=(2, 3), min_df: int = 2) -> pd.DataFrame:
+    """
+    Count n-grams in a list of texts with proper noun protection.
+    
+    Protects multi-word proper nouns (e.g., "Abu Dhabi") from being split
+    during tokenization.
+    """
     if not texts:
-        return pd.DataFrame(columns=["ngram", "count"])    
-    n_docs = len(texts)
+        return pd.DataFrame(columns=["ngram", "count"])
+    
+    # Protect proper nouns before tokenization
+    protected_texts = [protect_proper_nouns(t) for t in texts]
+    
+    n_docs = len(protected_texts)
     eff_min_df = min_df if n_docs >= min_df else max(1, n_docs)
     try:
         vectorizer = CountVectorizer(ngram_range=ngram_range, min_df=eff_min_df, stop_words="english")
-        X = vectorizer.fit_transform(texts)
+        X = vectorizer.fit_transform(protected_texts)
     except ValueError:
         # Fallback for very small corpora
         vectorizer = CountVectorizer(ngram_range=ngram_range, min_df=1, stop_words="english")
-        X = vectorizer.fit_transform(texts)
+        X = vectorizer.fit_transform(protected_texts)
     counts = np.asarray(X.sum(axis=0)).ravel()
     ngrams = vectorizer.get_feature_names_out()
-    df = pd.DataFrame({"ngram": ngrams, "count": counts})
+    
+    # Restore proper nouns in the output
+    restored_ngrams = [restore_proper_nouns(ng) for ng in ngrams]
+    
+    df = pd.DataFrame({"ngram": restored_ngrams, "count": counts})
     df = df.sort_values("count", ascending=False)
     return df
 
@@ -933,16 +1036,30 @@ def generate_questions(phrases: Iterable[str], top_n: int = 50, prefixes: Option
 
 
 def tfidf_top_terms_per_doc(texts: List[str], ngram_range=(2, 3), top_k: int = 10) -> List[str]:
+    """
+    Extract top TF-IDF terms per document with proper noun protection.
+    
+    Protects multi-word proper nouns from being split during tokenization.
+    """
     if not texts:
         return []
+    
+    # Protect proper nouns before tokenization
+    protected_texts = [protect_proper_nouns(t) for t in texts]
+    
     vec = TfidfVectorizer(ngram_range=ngram_range, stop_words="english")
-    X = vec.fit_transform(texts)
+    X = vec.fit_transform(protected_texts)
     terms = vec.get_feature_names_out()
+    
     tops: List[str] = []
     for i in range(X.shape[0]):
         row = X.getrow(i).toarray().ravel()
         idx = np.argsort(-row)[:top_k]
         tops.extend([terms[j] for j in idx if row[j] > 0])
+    
+    # Restore proper nouns in the output
+    tops = [restore_proper_nouns(t) for t in tops]
+    
     return list(dict.fromkeys(tops))
 
 
