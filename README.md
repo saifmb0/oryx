@@ -2,7 +2,7 @@
 [![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/saifmb0/oryx?style=flat&logo=github&label=Release)](https://github.com/saifmb0/oryx/releases/latest)
 ![Tests](https://github.com/saifmb0/oryx/actions/workflows/test.yml/badge.svg)
 ![License](https://img.shields.io/badge/license-AGPL_v3-blue)
-![Python](https://img.shields.io/badge/python-3.9%2B-blue)
+![Python](https://img.shields.io/badge/python-3.12%2B-blue)
 ![Status](https://img.shields.io/badge/status-production_ready-green)
 
 **ORYX** is an enterprise-grade search intelligence platform optimized for the UAE and Gulf markets. Unlike generic SEO tools, ORYX integrates local geography, bilingual intent (Arabic/English), and the semantic nuances of B2B contracting.
