@@ -365,6 +365,46 @@ def get_bilingual_suggestions(
     return results
 
 
+def _is_valid_autocomplete_match(keyword: str, suggestion: str) -> bool:
+    """
+    Check if a keyword validly matches an autocomplete suggestion.
+    
+    Uses strict matching to avoid false positives:
+    - Exact match: keyword == suggestion
+    - Prefix match: suggestion starts with keyword + space
+    - Contained match: keyword appears as complete words in suggestion
+    
+    This prevents "how abu dhabi" from matching "how to build in abu dhabi"
+    just because it's a substring.
+    
+    Args:
+        keyword: The keyword to validate (lowercase)
+        suggestion: The autocomplete suggestion (lowercase)
+        
+    Returns:
+        True if the match is valid
+    """
+    keyword = keyword.strip().lower()
+    suggestion = suggestion.strip().lower()
+    
+    # Exact match
+    if keyword == suggestion:
+        return True
+    
+    # Suggestion starts with keyword (keyword is a valid search prefix)
+    if suggestion.startswith(keyword + " "):
+        return True
+    
+    # Keyword appears as complete phrase in suggestion (word boundaries)
+    # e.g., "villa construction" in "best villa construction dubai"
+    import re
+    pattern = r'\b' + re.escape(keyword) + r'\b'
+    if re.search(pattern, suggestion):
+        return True
+    
+    return False
+
+
 def validate_keywords_with_autocomplete(
     keywords: List[str],
     language: str = "en",
@@ -409,14 +449,15 @@ def validate_keywords_with_autocomplete(
             # Check both languages for bilingual markets
             bilingual_results = get_bilingual_suggestions(prefix, country_lower)
             for lang, suggestions in bilingual_results.items():
-                if any(kw_lower in s or s in kw_lower for s in suggestions):
+                # Strict match: keyword must exactly match or be the start of a suggestion
+                if any(_is_valid_autocomplete_match(kw_lower, s) for s in suggestions):
                     is_validated = True
                     break
         else:
-            # Standard single-language check
+            # Standard single-language check - strict matching
             suggestions = get_google_suggestions(prefix, language, country)
             is_validated = any(
-                kw_lower in s or s in kw_lower 
+                _is_valid_autocomplete_match(kw_lower, s)
                 for s in suggestions
             )
         
