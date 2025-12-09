@@ -305,6 +305,43 @@ def is_stop_phrase(keyword: str) -> bool:
 
 
 # =============================================================================
+# Numeric Noise Filter
+# =============================================================================
+# Keywords that are mostly/entirely numbers are useless for SEO content
+# e.g., "971 50", "2024 2025", "10 12" should be discarded
+
+def is_numeric_noise(keyword: str) -> bool:
+    """
+    Check if keyword is numeric noise (mostly digits and spaces).
+    
+    Matches patterns like:
+    - "971 50" (phone number fragments)
+    - "2024 2025" (year spans)
+    - "10 12 15" (number sequences)
+    
+    Args:
+        keyword: The keyword to check
+        
+    Returns:
+        True if the keyword is numeric noise that should be discarded
+    """
+    # Remove all digits and spaces - if nothing remains, it's numeric noise
+    if re.fullmatch(r'[\d\s\-\.]+', keyword):
+        return True
+    
+    # Also reject if more than 50% of words are purely numeric
+    words = keyword.split()
+    if not words:
+        return False
+    
+    numeric_words = sum(1 for w in words if re.fullmatch(r'\d+', w))
+    if numeric_words / len(words) > 0.5:
+        return True
+    
+    return False
+
+
+# =============================================================================
 # Negative Sentiment Shield
 # =============================================================================
 # Terms that indicate negative/harmful content. Keywords containing these
@@ -1366,6 +1403,16 @@ def generate_candidates(
     filtered = cands_before - len(cands)
     if filtered > 0:
         logging.info(f"Stop-phrase filter: Removed {filtered} keywords")
+    
+    # ==========================================================================
+    # Step 7.6: Numeric Noise Filter
+    # ==========================================================================
+    # Discard keywords that are mostly/entirely numbers (e.g., "971 50")
+    cands_before = len(cands)
+    cands = [c for c in cands if not is_numeric_noise(c)]
+    filtered = cands_before - len(cands)
+    if filtered > 0:
+        logging.info(f"Numeric noise filter: Removed {filtered} keywords")
     
     # ==========================================================================
     # Step 8: Near Me Position Fix (Week 3 - Semantic Logic Gates)
