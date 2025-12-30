@@ -815,8 +815,8 @@ def _suggest_schema_type(intent: str, cluster_name: str) -> str:
 # =============================================================================
 
 def generate_run_id() -> str:
-    """Generate a timestamped run ID in YYYYMMDDHHMM format."""
-    return datetime.now().strftime("%Y%m%d%H%M")
+    """Generate a timestamped run ID in YYYYMMDDHHMMSS format."""
+    return datetime.now().strftime("%Y%m%d%H%M%S")
 
 
 def get_run_dir(base_dir: str = "./data", run_id: Optional[str] = None) -> Path:
@@ -828,11 +828,11 @@ def get_run_dir(base_dir: str = "./data", run_id: Optional[str] = None) -> Path:
         run_id: Optional run ID. If None, generates a new one.
         
     Returns:
-        Path to the run directory (e.g., ./data/run_id=202506151430/)
+        Path to the run directory (e.g., ./data/202506151430/)
     """
     if run_id is None:
         run_id = generate_run_id()
-    run_dir = Path(base_dir) / f"run_id={run_id}"
+    run_dir = Path(base_dir) / f"{run_id}"
     run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir
 
