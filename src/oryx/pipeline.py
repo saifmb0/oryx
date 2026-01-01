@@ -10,7 +10,7 @@ from .scrape import acquire_documents, Document, validate_keywords_with_autocomp
 from .nlp import generate_candidates, clean_text
 from .cluster import cluster_keywords, infer_intent
 from .linguistics import LinguisticsValidator
-from .metrics import compute_metrics, opportunity_scores
+from .metrics import compute_metrics, opportunity_scores, detect_universal_terms, DEFAULT_UNIVERSAL_TERMS
 from .schema import validate_items
 from .io import write_output
 from .llm import expand_with_llm, assign_parent_topics, verify_candidates_with_llm
@@ -220,6 +220,29 @@ def run_pipeline(
         freq = {kw: int(sums[i]) for i, kw in enumerate(vectorizer.get_feature_names_out())}
     except Exception:
         freq = {kw: 1 for kw in candidates}
+
+    # Hard-filter universal terms (boilerplate/navigation) BEFORE scoring
+    # Keywords consisting entirely of universal terms are removed completely
+    universal_terms = detect_universal_terms(cleaned_texts) if cleaned_texts else DEFAULT_UNIVERSAL_TERMS
+    
+    def is_entirely_universal(kw: str) -> bool:
+        """Check if keyword consists entirely of universal/boilerplate terms."""
+        tokens = set(kw.lower().split())
+        return tokens and tokens.issubset(universal_terms)
+    
+    candidates_before_universal = len(candidates)
+    candidates = [c for c in candidates if not is_entirely_universal(c)]
+    if candidates_before_universal > len(candidates):
+        logging.info(f"Hard-filtered {candidates_before_universal - len(candidates)} universal term keywords")
+    
+    # Update freq to only include remaining candidates
+    freq = {k: v for k, v in freq.items() if k in candidates}
+    
+    # Early exit if no candidates after universal term filtering
+    if not candidates:
+        if output:
+            write_output([], output, save_csv)
+        return []
 
     # Cluster with optional silhouette-based K selection
     cluster_cfg = cfg_dict.get("cluster", {})
