@@ -1,0 +1,69 @@
+# ORYX Boilerplate Terms
+# ======================
+# Common scraping noise and navigation terms to filter out.
+# One term per line. Lines starting with # are comments.
+# These terms will be excluded from keyword candidates.
+
+# Authentication/User Actions
+login
+signup
+sign in
+sign up
+register
+password
+forgot password
+reset password
+logout
+log out
+
+# Navigation
+menu
+search
+cart
+home
+about
+contact
+footer
+header
+navigation
+sidebar
+
+# Legal/Policy
+terms of service
+privacy policy
+cookie policy
+disclaimer
+copyright
+
+# Days of the week
+monday
+tuesday
+wednesday
+thursday
+friday
+saturday
+sunday
+
+# Generic UI elements
+subscribe
+newsletter
+follow us
+share
+download
+print
+close
+cancel
+submit
+save
+edit
+delete
+
+# Quality/Generic terms often appearing as noise
+quality standards
+all rights reserved
+read more
+learn more
+click here
+see more
+view more
+show more
