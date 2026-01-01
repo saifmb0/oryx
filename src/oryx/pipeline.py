@@ -10,7 +10,7 @@ from .scrape import acquire_documents, Document, validate_keywords_with_autocomp
 from .nlp import generate_candidates, clean_text
 from .cluster import cluster_keywords, infer_intent
 from .linguistics import LinguisticsValidator
-from .metrics import compute_metrics, opportunity_scores, detect_universal_terms, DEFAULT_UNIVERSAL_TERMS
+from .metrics import compute_metrics, opportunity_scores, detect_universal_terms, DEFAULT_UNIVERSAL_TERMS, generate_reference_phrases
 from .schema import validate_items
 from .io import write_output
 from .llm import expand_with_llm, assign_parent_topics, verify_candidates_with_llm
@@ -285,6 +285,10 @@ def run_pipeline(
     scoring_cfg = cfg_dict.get("scoring", {})
     commercial_weight = float(scoring_cfg.get("commercial_weight", 0.25))
     
+    # Generate dynamic reference phrases based on seed_topic
+    # This ensures naturalness scoring adapts to the user's niche
+    reference_phrases = generate_reference_phrases(seed_topic)
+    
     # Calculate opportunity scores with naturalness and universal term penalty
     # This activates the perplexity-based quality filtering from metrics.py
     opp = opportunity_scores(
@@ -296,6 +300,7 @@ def run_pipeline(
         documents=cleaned_texts,         # Pass documents for universal term detection
         use_naturalness=True,            # Activate perplexity-based naturalness scoring
         use_universal_penalty=True,      # Penalize boilerplate/navigation terms
+        reference_phrases=reference_phrases,  # Dynamic phrases based on seed_topic
     )
 
     # Assign parent topics for hub-spoke SEO silo architecture

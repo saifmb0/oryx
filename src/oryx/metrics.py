@@ -35,16 +35,17 @@ def _get_perplexity_model():
     return _perplexity_model
 
 
-# Reference phrases for naturalness comparison
-NATURAL_REFERENCE_PHRASES = [
-    "best contractors in dubai",
-    "villa renovation cost",
-    "how to hire a contractor",
-    "construction company near me",
-    "warehouse building services",
-    "professional renovation services",
-    "where to find contractors",
-    "commercial construction dubai",
+# Default reference phrases for naturalness comparison (used as fallback)
+# These are generic and will be replaced with dynamic phrases based on seed_topic
+DEFAULT_NATURAL_REFERENCE_PHRASES = [
+    "best product reviews",
+    "how to compare options",
+    "professional services near me",
+    "cost of services",
+    "where to find experts",
+    "top rated solutions",
+    "complete guide to",
+    "pricing comparison",
 ]
 
 # Clearly unnatural/garbage phrases for comparison
@@ -57,7 +58,42 @@ UNNATURAL_REFERENCE_PHRASES = [
 ]
 
 
-def calculate_naturalness_score(keyword: str) -> float:
+def generate_reference_phrases(seed_topic: str) -> List[str]:
+    """
+    Generate natural reference phrases dynamically based on seed topic.
+    
+    This ensures the naturalness scoring adapts to the user's niche
+    instead of being hardcoded to construction/contracting.
+    
+    Args:
+        seed_topic: The user's seed topic (e.g., "SaaS CRM", "villa construction")
+        
+    Returns:
+        List of natural reference phrases for this niche
+    """
+    seed_lower = seed_topic.lower().strip()
+    
+    # Generate niche-specific reference phrases
+    phrases = [
+        f"best {seed_lower}",
+        f"{seed_lower} pricing",
+        f"{seed_lower} cost",
+        f"what is {seed_lower}",
+        f"how to choose {seed_lower}",
+        f"{seed_lower} reviews",
+        f"{seed_lower} comparison",
+        f"top {seed_lower} services",
+        f"{seed_lower} near me",
+        f"professional {seed_lower}",
+    ]
+    
+    return phrases
+
+
+def calculate_naturalness_score(
+    keyword: str,
+    reference_phrases: Optional[List[str]] = None,
+) -> float:
     """
     Calculate how "natural" a keyword phrase sounds using embeddings.
     
@@ -66,6 +102,8 @@ def calculate_naturalness_score(keyword: str) -> float:
     
     Args:
         keyword: The keyword to score
+        reference_phrases: Optional custom reference phrases for this niche.
+                          If not provided, uses DEFAULT_NATURAL_REFERENCE_PHRASES.
         
     Returns:
         Float between 0-1 where 1 = highly natural, 0 = nonsense
@@ -74,12 +112,14 @@ def calculate_naturalness_score(keyword: str) -> float:
     if model is None:
         return 0.5  # Default to neutral if model unavailable
     
+    natural_refs = reference_phrases if reference_phrases else DEFAULT_NATURAL_REFERENCE_PHRASES
+    
     try:
         # Encode the keyword
         kw_embedding = model.encode(keyword, convert_to_tensor=True)
         
         # Encode reference phrases
-        natural_embeddings = model.encode(NATURAL_REFERENCE_PHRASES, convert_to_tensor=True)
+        natural_embeddings = model.encode(natural_refs, convert_to_tensor=True)
         unnatural_embeddings = model.encode(UNNATURAL_REFERENCE_PHRASES, convert_to_tensor=True)
         
         # Calculate similarity to natural phrases
@@ -101,7 +141,10 @@ def calculate_naturalness_score(keyword: str) -> float:
         return 0.5
 
 
-def batch_naturalness_scores(keywords: List[str]) -> Dict[str, float]:
+def batch_naturalness_scores(
+    keywords: List[str],
+    reference_phrases: Optional[List[str]] = None,
+) -> Dict[str, float]:
     """
     Calculate naturalness scores for a batch of keywords.
     
@@ -109,6 +152,8 @@ def batch_naturalness_scores(keywords: List[str]) -> Dict[str, float]:
     
     Args:
         keywords: List of keywords to score
+        reference_phrases: Optional custom reference phrases for this niche.
+                          If not provided, uses DEFAULT_NATURAL_REFERENCE_PHRASES.
         
     Returns:
         Dict mapping keyword to naturalness score
@@ -120,10 +165,12 @@ def batch_naturalness_scores(keywords: List[str]) -> Dict[str, float]:
     if model is None:
         return {kw: 0.5 for kw in keywords}
     
+    natural_refs = reference_phrases if reference_phrases else DEFAULT_NATURAL_REFERENCE_PHRASES
+    
     try:
         # Encode all at once for efficiency
         kw_embeddings = model.encode(keywords, convert_to_tensor=True)
-        natural_embeddings = model.encode(NATURAL_REFERENCE_PHRASES, convert_to_tensor=True)
+        natural_embeddings = model.encode(natural_refs, convert_to_tensor=True)
         unnatural_embeddings = model.encode(UNNATURAL_REFERENCE_PHRASES, convert_to_tensor=True)
         
         scores = {}
@@ -698,6 +745,7 @@ def opportunity_scores(
     use_naturalness: bool = True,
     use_universal_penalty: bool = True,
     unvalidated_penalty: float = 0.9,
+    reference_phrases: Optional[List[str]] = None,
 ) -> Dict[str, float]:
     """
     Calculate opportunity scores for keywords with quality filtering.
@@ -720,6 +768,8 @@ def opportunity_scores(
         use_naturalness: Whether to apply naturalness scoring
         use_universal_penalty: Whether to apply universal term penalty
         unvalidated_penalty: Penalty factor (0-1) for unvalidated keywords (0.9 = 90% reduction)
+        reference_phrases: Optional custom reference phrases for naturalness scoring.
+                          Use generate_reference_phrases(seed_topic) to create dynamic phrases.
         
     Returns:
         Dict mapping keyword -> opportunity score (0.0 - 1.0)
@@ -741,7 +791,7 @@ def opportunity_scores(
     keywords = list(metrics.keys())
     naturalness_scores = {}
     if use_naturalness and HAS_SENTENCE_TRANSFORMERS:
-        naturalness_scores = batch_naturalness_scores(keywords)
+        naturalness_scores = batch_naturalness_scores(keywords, reference_phrases)
     
     for k, m in metrics.items():
         intent = intents.get(k, "informational")
