@@ -1,0 +1,122 @@
+{
+  "_doc": "ORYX GEO Patterns - Query classification and trust signals by locale",
+  
+  "query_patterns": {
+    "global": {
+      "direct_answer": [
+        "^what is\\b",
+        "^how much\\b",
+        "^how long\\b",
+        "^when did\\b",
+        "\\bcost of\\b",
+        "\\bprice of\\b",
+        "\\bmeaning of\\b"
+      ],
+      "complex_research": [
+        "\\bprocess of\\b",
+        "\\bsteps to\\b",
+        "\\bhow does\\b.*work",
+        "\\bwhat are the\\b.*considerations",
+        "\\bfactors\\b"
+      ],
+      "comparative": [
+        "\\bvs\\b",
+        "\\bversus\\b",
+        "\\bcompared to\\b",
+        "\\bdifference between\\b",
+        "\\bor\\b(?=.*\\bwhich\\b)",
+        "\\bbetter\\b"
+      ],
+      "tutorial": [
+        "^how to\\b",
+        "\\bguide\\b",
+        "\\btutorial\\b",
+        "\\bstep by step\\b",
+        "\\btips for\\b",
+        "\\bways to\\b"
+      ],
+      "list": [
+        "^best\\b",
+        "^top\\s+\\d+",
+        "\\blist of\\b",
+        "\\btypes of\\b",
+        "\\brecommended\\b",
+        "\\bpopular\\b"
+      ],
+      "definition": [
+        "^what is\\b",
+        "^define\\b",
+        "\\bdefinition of\\b",
+        "^what are\\b",
+        "\\bexplain\\b"
+      ]
+    },
+    
+    "en-AE": {
+      "local": [
+        "\\bin dubai\\b",
+        "\\bin abu dhabi\\b",
+        "\\bin uae\\b",
+        "\\bnear me\\b",
+        "\\bin sharjah\\b",
+        "\\bal ain\\b",
+        "\\bmussafah\\b",
+        "\\bin ajman\\b",
+        "\\bin ras al khaimah\\b",
+        "\\bin fujairah\\b"
+      ]
+    },
+    
+    "en-US": {
+      "local": [
+        "\\bnear me\\b",
+        "\\bin my area\\b",
+        "\\blocal\\b",
+        "\\bnearby\\b"
+      ]
+    }
+  },
+  
+  "trust_signals": {
+    "global": {
+      "experience": [
+        {"pattern": "\\byears? of experience\\b", "description": "Years of experience mentioned"},
+        {"pattern": "\\bcompleted\\s+\\d+\\s+projects?\\b", "description": "Project count mentioned"},
+        {"pattern": "\\bcase stud(?:y|ies)\\b", "description": "Case studies present"},
+        {"pattern": "\\bbefore\\s+and\\s+after\\b", "description": "Before/after examples"},
+        {"pattern": "\\bclient testimonial", "description": "Client testimonials"}
+      ],
+      "expertise": [
+        {"pattern": "\\blicensed\\b", "description": "Licensed professional"},
+        {"pattern": "\\bcertified\\b", "description": "Certifications mentioned"},
+        {"pattern": "\\bspeciali[sz]e\\b", "description": "Specialization stated"},
+        {"pattern": "\\biso\\s*\\d+", "description": "ISO certification"}
+      ],
+      "authority": [
+        {"pattern": "\\baward(?:s|ed)?\\b", "description": "Awards mentioned"},
+        {"pattern": "\\bmember of\\b", "description": "Professional membership"},
+        {"pattern": "\\bapproved by\\b", "description": "Approval mentioned"}
+      ],
+      "trust": [
+        {"pattern": "\\bguarantee[ds]?\\b", "description": "Guarantee offered"},
+        {"pattern": "\\bwarrant(?:y|ies)\\b", "description": "Warranty mentioned"},
+        {"pattern": "\\binsured\\b", "description": "Insurance mentioned"},
+        {"pattern": "\\btransparent pricing\\b", "description": "Price transparency"},
+        {"pattern": "\\bno hidden\\s+(fees?|costs?)\\b", "description": "No hidden costs"},
+        {"pattern": "\\bfree\\s+(?:quote|estimate|consultation)\\b", "description": "Free quote/consultation"}
+      ]
+    },
+    
+    "en-AE": {
+      "expertise": [
+        {"pattern": "\\bestidama\\b", "description": "Estidama certification"},
+        {"pattern": "\\bpearl rated?\\b", "description": "Pearl rating mentioned"}
+      ],
+      "authority": [
+        {"pattern": "\\bgovernment\\s+approved\\b", "description": "UAE Government approval"},
+        {"pattern": "\\btamm\\s+registered\\b", "description": "TAMM registration"},
+        {"pattern": "\\bded\\s+(?:licensed|registered)\\b", "description": "DED license"}
+      ]
+    }
+  }
+}

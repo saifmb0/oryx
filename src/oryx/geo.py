@@ -11,11 +11,13 @@ Key Concepts:
 """
 
 import json
+import logging
 import math
 import re
 from collections import Counter
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 try:
@@ -24,6 +26,103 @@ try:
     HAS_SKLEARN = True
 except ImportError:
     HAS_SKLEARN = False
+
+
+# =============================================================================
+# Pattern Loading from External JSON
+# =============================================================================
+
+_geo_patterns_cache: Optional[Dict] = None
+
+
+def _get_geo_patterns_path() -> Path:
+    """Get path to geo_patterns.json resource file."""
+    return Path(__file__).parent / "resources" / "geo_patterns.json"
+
+
+def _load_geo_patterns() -> Dict:
+    """Load geo patterns from JSON file with caching."""
+    global _geo_patterns_cache
+    
+    if _geo_patterns_cache is not None:
+        return _geo_patterns_cache
+    
+    patterns_path = _get_geo_patterns_path()
+    
+    if patterns_path.exists():
+        try:
+            with open(patterns_path, "r", encoding="utf-8") as f:
+                _geo_patterns_cache = json.load(f)
+            logging.debug(f"Loaded geo patterns from {patterns_path}")
+            return _geo_patterns_cache
+        except Exception as e:
+            logging.warning(f"Failed to load geo patterns from {patterns_path}: {e}")
+    
+    # Return empty dict if file not found or error
+    _geo_patterns_cache = {"query_patterns": {}, "trust_signals": {}}
+    return _geo_patterns_cache
+
+
+def get_query_patterns(locale: str = "global") -> Dict[str, List[str]]:
+    """
+    Get query patterns for a specific locale.
+    
+    Merges global patterns with locale-specific patterns.
+    
+    Args:
+        locale: Locale code (e.g., "en-AE", "en-US", "global")
+        
+    Returns:
+        Dict mapping query type to list of regex patterns
+    """
+    data = _load_geo_patterns()
+    patterns_data = data.get("query_patterns", {})
+    
+    # Start with global patterns
+    result = dict(patterns_data.get("global", {}))
+    
+    # Merge locale-specific patterns
+    if locale != "global" and locale in patterns_data:
+        locale_patterns = patterns_data[locale]
+        for key, patterns in locale_patterns.items():
+            if key in result:
+                result[key] = result[key] + patterns
+            else:
+                result[key] = patterns
+    
+    return result
+
+
+def get_trust_signals(locale: str = "global") -> Dict[str, List[Tuple[str, str]]]:
+    """
+    Get trust signal patterns for a specific locale.
+    
+    Merges global signals with locale-specific signals.
+    
+    Args:
+        locale: Locale code (e.g., "en-AE", "en-US", "global")
+        
+    Returns:
+        Dict mapping category to list of (pattern, description) tuples
+    """
+    data = _load_geo_patterns()
+    signals_data = data.get("trust_signals", {})
+    
+    # Start with global signals
+    result = {}
+    for category, patterns in signals_data.get("global", {}).items():
+        result[category] = [(p["pattern"], p["description"]) for p in patterns]
+    
+    # Merge locale-specific signals
+    if locale != "global" and locale in signals_data:
+        locale_signals = signals_data[locale]
+        for category, patterns in locale_signals.items():
+            if category in result:
+                result[category] = result[category] + [(p["pattern"], p["description"]) for p in patterns]
+            else:
+                result[category] = [(p["pattern"], p["description"]) for p in patterns]
+    
+    return result
 
 
 # =============================================================================
@@ -41,8 +140,8 @@ class GeoQueryType(str, Enum):
     DEFINITION = "definition"              # What is X queries
 
 
-# Query patterns for classification
-GEO_QUERY_PATTERNS = {
+# Default fallback patterns (used if JSON file not found)
+_DEFAULT_GEO_QUERY_PATTERNS = {
     GeoQueryType.DIRECT_ANSWER: [
         r"^what is\b", r"^how much\b", r"^how long\b", r"^when did\b",
         r"\bcost of\b", r"\bprice of\b", r"\bmeaning of\b",
@@ -73,22 +172,61 @@ GEO_QUERY_PATTERNS = {
     ],
 }
 
+# Backward compatibility alias (deprecated - use get_query_patterns())
+GEO_QUERY_PATTERNS = _DEFAULT_GEO_QUERY_PATTERNS
 
-def classify_geo_query(query: str) -> GeoQueryType:
+
+def _build_query_patterns(locale: str = "global") -> Dict[GeoQueryType, List[str]]:
+    """
+    Build query patterns dict with GeoQueryType keys from JSON.
+    
+    Args:
+        locale: Locale code for locale-specific patterns
+        
+    Returns:
+        Dict mapping GeoQueryType to list of regex patterns
+    """
+    json_patterns = get_query_patterns(locale)
+    
+    if not json_patterns:
+        return _DEFAULT_GEO_QUERY_PATTERNS
+    
+    # Map string keys to GeoQueryType enum
+    result = {}
+    for type_str, patterns in json_patterns.items():
+        try:
+            query_type = GeoQueryType(type_str)
+            result[query_type] = patterns
+        except ValueError:
+            logging.debug(f"Unknown query type: {type_str}")
+    
+    # Fill in any missing types from defaults
+    for query_type in GeoQueryType:
+        if query_type not in result:
+            result[query_type] = _DEFAULT_GEO_QUERY_PATTERNS.get(query_type, [])
+    
+    return result
+
+
+def classify_geo_query(query: str, locale: str = "global") -> GeoQueryType:
     """
     Classify query type for GEO optimization.
     
     Args:
         query: Search query to classify
+        locale: Locale for locale-specific patterns
         
     Returns:
         GeoQueryType classification
     """
     query_lower = query.lower()
     
+    # Build patterns from JSON file (with locale support)
+    patterns = _build_query_patterns(locale)
+    
     # Check patterns in priority order
-    for query_type, patterns in GEO_QUERY_PATTERNS.items():
-        for pattern in patterns:
+    for query_type, type_patterns in patterns.items():
+        for pattern in type_patterns:
             if re.search(pattern, query_lower):
                 return query_type
     
@@ -521,7 +659,29 @@ TRUST_SIGNAL_PATTERNS = {
 }
 
 
-def analyze_trust_signals(content: str) -> TrustSignalResult:
+def _build_trust_signals(locale: str = "global") -> Dict[str, List[Tuple[str, str]]]:
+    """
+    Build trust signal patterns from JSON file with locale support.
+    
+    Args:
+        locale: Locale code for locale-specific signals
+        
+    Returns:
+        Dict mapping category to list of (pattern, description) tuples
+    """
+    json_signals = get_trust_signals(locale)
+    
+    if not json_signals:
+        return _DEFAULT_TRUST_SIGNAL_PATTERNS
+    
+    return json_signals
+
+
+# Backward compatibility alias (deprecated - use get_trust_signals())
+_DEFAULT_TRUST_SIGNAL_PATTERNS = TRUST_SIGNAL_PATTERNS
+
+
+def analyze_trust_signals(content: str, locale: str = "global") -> TrustSignalResult:
     """
     Analyze content for E-E-A-T trust signals.
     
@@ -530,16 +690,20 @@ def analyze_trust_signals(content: str) -> TrustSignalResult:
     
     Args:
         content: Content to analyze
+        locale: Locale for locale-specific trust signals
         
     Returns:
         TrustSignalResult with scores and recommendations
     """
     content_lower = content.lower()
     
-    signals_found = []
-    signals_by_category = {cat: [] for cat in TRUST_SIGNAL_PATTERNS}
+    # Build patterns from JSON file (with locale support)
+    trust_patterns = _build_trust_signals(locale)
     
-    for category, patterns in TRUST_SIGNAL_PATTERNS.items():
+    signals_found = []
+    signals_by_category = {cat: [] for cat in trust_patterns}
+    
+    for category, patterns in trust_patterns.items():
         for pattern, description in patterns:
             if re.search(pattern, content_lower):
                 signals_found.append(description)
@@ -553,10 +717,10 @@ def analyze_trust_signals(content: str) -> TrustSignalResult:
         "trust": 6,
     }
     
-    experience_score = min(len(signals_by_category["experience"]) / max_signals["experience"], 1.0)
-    expertise_score = min(len(signals_by_category["expertise"]) / max_signals["expertise"], 1.0)
-    authority_score = min(len(signals_by_category["authority"]) / max_signals["authority"], 1.0)
-    trust_score = min(len(signals_by_category["trust"]) / max_signals["trust"], 1.0)
+    experience_score = min(len(signals_by_category.get("experience", [])) / max_signals["experience"], 1.0)
+    expertise_score = min(len(signals_by_category.get("expertise", [])) / max_signals["expertise"], 1.0)
+    authority_score = min(len(signals_by_category.get("authority", [])) / max_signals["authority"], 1.0)
+    trust_score = min(len(signals_by_category.get("trust", [])) / max_signals["trust"], 1.0)
     
     # Overall score (weighted)
     overall_score = (
@@ -568,7 +732,7 @@ def analyze_trust_signals(content: str) -> TrustSignalResult:
     
     # Identify missing signals
     all_signals = set()
-    for patterns in TRUST_SIGNAL_PATTERNS.values():
+    for patterns in trust_patterns.values():
         for _, desc in patterns:
             all_signals.add(desc)
     signals_missing = list(all_signals - set(signals_found))
