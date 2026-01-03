@@ -55,13 +55,14 @@ def _get_nlp():
 # Pattern Definitions for Garbage Detection
 # =============================================================================
 
-# Pattern 1: Temporal patterns (day names, months)
+# Pattern 1: Temporal patterns (day names, months, years, quarters)
 _TEMPORAL_PATTERN = re.compile(
     r"^(monday|tuesday|wednesday|thursday|friday|saturday|sunday|"
     r"january|february|march|april|may|june|july|august|september|"
-    r"october|november|december)(\s+(monday|tuesday|wednesday|thursday|"
+    r"october|november|december|\d{4}|q[1-4](\s+\d{4})?|"
+    r"\d{4}-\d{4})(\s+(monday|tuesday|wednesday|thursday|"
     r"friday|saturday|sunday|january|february|march|april|may|june|july|"
-    r"august|september|october|november|december))*$",
+    r"august|september|october|november|december|\d{4}))*$",
     re.IGNORECASE
 )
 
@@ -87,6 +88,11 @@ _NAVIGATIONAL_GARBAGE = frozenset({
     "continue reading",
     "next page",
     "previous page",
+    "skip to content",
+    "jump to content",
+    "main content",
+    "next article",
+    "previous article",
 })
 
 # Pattern 3: Prepositions that shouldn't end phrases
@@ -133,6 +139,7 @@ class LinguisticsValidator:
         Check if a phrase is linguistically valid.
         
         Returns False if the text:
+        - Is purely numeric (e.g., "2024")
         - Is purely stopwords, verbs, or adjectives
         - Lacks at least one NOUN or PROPN
         - Matches temporal patterns (day names, months)
@@ -149,6 +156,11 @@ class LinguisticsValidator:
             return False
         
         text = text.strip().lower()
+        
+        # Pattern 0: Reject purely numeric strings (e.g., "2024")
+        if text.isdigit():
+            logging.debug(f"Rejected purely numeric: '{text}'")
+            return False
         
         # Pattern 1: Reject pure temporal patterns
         if _TEMPORAL_PATTERN.match(text):
@@ -225,10 +237,12 @@ class LinguisticsValidator:
         # Very short phrases of only common words: suspicious
         common_words = {"the", "a", "an", "and", "or", "but", "is", "are", "was", "were", 
                         "be", "been", "being", "have", "has", "had", "do", "does", "did",
-                        "will", "would", "could", "should", "may", "might", "must", "can"}
+                        "will", "would", "could", "should", "may", "might", "must", "can",
+                        "very", "good", "bad", "best", "worst", "more", "less", "most", "least",
+                        "quickly", "slowly", "well", "fast", "now", "then", "here", "there"}
         
         if all(w in common_words for w in words):
-            logging.debug(f"Rejected all common words: '{text}'")
+            logging.debug(f"Rejected all common/garbage words: '{text}'")
             return False
         
         return True
